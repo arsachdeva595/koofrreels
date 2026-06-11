@@ -281,7 +281,7 @@ async def approve_step(job_id: str, body: ApprovalRequest):
 
 
 @app.get("/reel/download/{job_id}")
-async def download_reel(job_id: str):
+async def download_reel(job_id: str, request: Request):
     job = job_manager.get(job_id)
     if not job:
         raise HTTPException(status_code=404, detail="Job not found")
@@ -291,6 +291,20 @@ async def download_reel(job_id: str):
     output_path = job.result.get("output_path")
     if not output_path or not Path(output_path).exists():
         raise HTTPException(status_code=404, detail="Output file not found")
+
+    # On the server, use X-Accel-Redirect so nginx serves the file directly
+    # (much faster than streaming through uvicorn). Falls back to FileResponse locally.
+    accel_base = "/opt/koofrreels/"
+    if Path(output_path).is_absolute() and output_path.startswith(accel_base):
+        relative = output_path[len(accel_base):]
+        return JSONResponse(
+            content={},
+            headers={
+                "X-Accel-Redirect": f"/internal-files/{relative}",
+                "Content-Type": "video/mp4",
+                "Content-Disposition": 'attachment; filename="reel.mp4"',
+            },
+        )
 
     return FileResponse(path=output_path, media_type="video/mp4", filename="reel.mp4")
 
