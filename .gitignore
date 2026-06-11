@@ -1,0 +1,29 @@
+# Secrets & local config
+.env
+settings.json
+
+# Generated runtime data
+reel_queue.json
+projects/
+uploads/
+music/
+
+# Python
+.venv/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.egg-info/
+dist/
+build/
+
+# macOS
+.DS_Store
+
+# Large media
+*.mp4
+*.mov
+*.heic
+*.HEIC
+*.zip

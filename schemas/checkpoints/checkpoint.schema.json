@@ -1,0 +1,26 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "checkpoint",
+  "type": "object",
+  "required": ["version", "project_id", "stage", "status", "timestamp", "artifacts"],
+  "properties": {
+    "version": { "type": "string" },
+    "project_id": { "type": "string" },
+    "stage": { "type": "string" },
+    "status": {
+      "type": "string",
+      "enum": ["completed", "approved", "awaiting_human", "failed", "skipped"]
+    },
+    "timestamp": { "type": "string" },
+    "artifacts": { "type": "object" },
+    "metadata": {
+      "type": "object",
+      "properties": {
+        "review_findings": { "type": "object" },
+        "human_approved": { "type": "boolean" },
+        "approval_notes": { "type": "string" },
+        "cost_usd": { "type": "number" }
+      }
+    }
+  }
+}

@@ -1,0 +1,3285 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>KoofrReels</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --purple: #7c3aed;
+      --purple-dark: #6d28d9;
+      --purple-dim: #3b2a66;
+      --purple-bg: #1e1428;
+      --purple-text: #a78bfa;
+      --bg: #0d0d0d;
+      --bg2: #1a1a1a;
+      --bg3: #252525;
+      --border: #2a2a2a;
+      --border2: #333;
+      --text: #f0f0f0;
+      --text2: #ccc;
+      --text3: #888;
+      --text4: #555;
+      --green: #16a34a;
+      --amber: #d97706;
+      --red-bg: #2a0a0a;
+      --red-border: #7f1d1d;
+      --red-text: #fca5a5;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+    }
+
+    header {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 14px 20px;
+      border-bottom: 1px solid var(--border);
+      position: sticky;
+      top: 0;
+      background: var(--bg);
+      z-index: 50;
+    }
+
+    .logo { font-size: 18px; font-weight: 800; letter-spacing: -0.5px; }
+    .logo span { color: var(--purple-text); }
+    .tagline { font-size: 12px; color: var(--text4); display: none; }
+    .header-right { margin-left: auto; display: flex; align-items: center; gap: 8px; }
+
+    .btn-icon {
+      display: flex; align-items: center; gap: 6px;
+      padding: 6px 12px;
+      border-radius: 7px;
+      border: 1px solid var(--border2);
+      background: transparent;
+      color: var(--text3);
+      font-size: 13px;
+      text-decoration: none;
+      cursor: pointer;
+      transition: all 0.15s;
+      white-space: nowrap;
+    }
+    .btn-icon:hover { color: var(--text); border-color: #555; }
+
+    .page {
+      display: grid;
+      grid-template-columns: 1fr;
+      min-height: calc(100vh - 49px);
+    }
+
+    @media (min-width: 1024px) {
+      .tagline { display: block; }
+      .page {
+        grid-template-columns: 1fr 420px;
+        height: calc(100vh - 49px);
+      }
+    }
+
+    /* ── Form panel ──────────────────────────────────────────────────────────── */
+    .form-panel {
+      padding: 24px 20px;
+      overflow-y: auto;
+    }
+
+    @media (min-width: 600px) { .form-panel { padding: 28px 32px; } }
+    @media (min-width: 1024px) {
+      .form-panel {
+        border-right: 1px solid var(--border);
+        height: 100%;
+        max-width: 680px;
+      }
+    }
+
+    /* ── Output panel ────────────────────────────────────────────────────────── */
+    .output-panel {
+      padding: 24px 20px;
+      display: flex;
+      flex-direction: column;
+      border-top: 1px solid var(--border);
+    }
+
+    @media (min-width: 600px) { .output-panel { padding: 28px 32px; } }
+    @media (min-width: 1024px) {
+      .output-panel {
+        border-top: none;
+        height: 100%;
+        overflow-y: auto;
+      }
+    }
+
+    /* ── Prompt ──────────────────────────────────────────────────────────────── */
+    .prompt-block { margin-bottom: 24px; }
+
+    .prompt-label {
+      font-size: 22px;
+      font-weight: 700;
+      color: var(--text);
+      margin-bottom: 6px;
+      line-height: 1.3;
+    }
+    @media (min-width: 600px) { .prompt-label { font-size: 26px; } }
+
+    .prompt-sub {
+      font-size: 13px;
+      color: var(--text3);
+      margin-bottom: 12px;
+      line-height: 1.5;
+    }
+
+    .prompt-input {
+      width: 100%;
+      background: var(--bg2);
+      border: 1.5px solid var(--border2);
+      border-radius: 10px;
+      color: var(--text);
+      font-size: 15px;
+      padding: 14px 16px;
+      outline: none;
+      resize: none;
+      min-height: 80px;
+      transition: border-color 0.15s;
+      line-height: 1.5;
+    }
+    .prompt-input:focus { border-color: var(--purple); }
+    .prompt-input::placeholder { color: var(--text4); }
+
+    .section-label {
+      font-size: 11px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.8px;
+      color: var(--text4);
+      margin-bottom: 10px;
+    }
+
+    /* ── Clip source ─────────────────────────────────────────────────────────── */
+    .source-block { margin-bottom: 20px; }
+
+    .source-pills { display: flex; gap: 8px; flex-wrap: wrap; }
+
+    .source-pill {
+      padding: 8px 16px;
+      border-radius: 100px;
+      border: 1.5px solid var(--border2);
+      background: transparent;
+      color: var(--text3);
+      font-size: 13px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: all 0.15s;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .source-pill:hover { border-color: #555; color: var(--text2); }
+    .source-pill.active {
+      background: var(--purple-bg);
+      border-color: var(--purple);
+      color: var(--purple-text);
+    }
+
+    .source-panel { display: none; margin-top: 14px; }
+    .source-panel.active { display: block; }
+
+    .source-hint {
+      font-size: 13px;
+      color: var(--text3);
+      line-height: 1.6;
+      padding: 12px 14px;
+      background: var(--bg2);
+      border-radius: 8px;
+      border: 1px solid var(--border);
+    }
+
+    .field-inline { display: flex; gap: 8px; align-items: center; }
+    .field-inline input { flex: 1; }
+
+    input[type="text"], input[type="number"], input[type="email"],
+    input[type="password"], input[type="time"], select, textarea {
+      width: 100%;
+      background: var(--bg2);
+      border: 1px solid var(--border2);
+      border-radius: 8px;
+      color: var(--text);
+      font-size: 13px;
+      padding: 9px 12px;
+      outline: none;
+      transition: border-color 0.15s;
+    }
+    input:focus, select:focus, textarea:focus { border-color: var(--purple); }
+
+    .subfolders { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 10px; }
+    .subfolder-btn {
+      font-size: 11px;
+      padding: 4px 10px;
+      background: var(--bg2);
+      border: 1px solid var(--border2);
+      border-radius: 100px;
+      color: var(--text3);
+      cursor: pointer;
+    }
+    .subfolder-btn:hover { border-color: #555; color: var(--text2); }
+
+    .clip-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(100px, 1fr));
+      gap: 8px;
+      margin-top: 10px;
+    }
+    @media (min-width: 480px) {
+      .clip-grid { grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); }
+    }
+
+    .clip-card {
+      background: var(--bg2);
+      border: 2px solid var(--border);
+      border-radius: 8px;
+      padding: 10px 8px;
+      cursor: pointer;
+      transition: all 0.15s;
+      position: relative;
+      text-align: center;
+    }
+    .clip-card:hover { border-color: #555; }
+    .clip-card.selected { border-color: var(--purple); background: var(--purple-bg); }
+    .clip-card .filename { font-size: 10px; word-break: break-all; color: var(--text2); margin-top: 4px; }
+    .clip-card .filesize { font-size: 10px; color: var(--text4); margin-top: 2px; }
+    .clip-card .check {
+      position: absolute; top: 5px; right: 5px;
+      width: 15px; height: 15px;
+      background: var(--purple); border-radius: 50%;
+      display: none; align-items: center; justify-content: center;
+      font-size: 8px; color: #fff;
+    }
+    .clip-card.selected .check { display: flex; }
+    .selection-summary { font-size: 12px; color: var(--text3); margin-top: 8px; }
+    .selection-summary strong { color: var(--purple-text); }
+
+    .load-btn {
+      padding: 8px 14px;
+      background: var(--bg2);
+      border: 1px solid var(--border2);
+      border-radius: 7px;
+      color: var(--text3);
+      font-size: 13px;
+      cursor: pointer;
+      white-space: nowrap;
+    }
+    .load-btn:hover { border-color: #555; color: var(--text); }
+
+    /* ── Settings ────────────────────────────────────────────────────────────── */
+    .settings-block { margin-bottom: 20px; }
+
+    .settings-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+    }
+    @media (min-width: 480px) {
+      .settings-grid { grid-template-columns: 1fr 1fr 1fr; }
+    }
+
+    .setting-item label {
+      display: block;
+      font-size: 11px;
+      color: var(--text4);
+      margin-bottom: 5px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+
+    .range-wrap { display: flex; align-items: center; gap: 8px; }
+    input[type="range"] { flex: 1; accent-color: var(--purple); }
+    .range-val { font-size: 13px; color: var(--text2); min-width: 28px; text-align: right; }
+
+    .toggle-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      padding: 10px 12px;
+      background: var(--bg2);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      margin-bottom: 12px;
+    }
+    .toggle-label { font-size: 13px; color: var(--text2); }
+
+    .switch { position: relative; display: inline-block; width: 36px; height: 20px; flex-shrink: 0; }
+    .switch input { opacity: 0; width: 0; height: 0; }
+    .slider {
+      position: absolute; cursor: pointer; inset: 0;
+      background: var(--border2); border-radius: 20px; transition: .2s;
+    }
+    .slider:before {
+      position: absolute; content: "";
+      height: 14px; width: 14px; left: 3px; bottom: 3px;
+      background: white; border-radius: 50%; transition: .2s;
+    }
+    .switch input:checked + .slider { background: var(--purple); }
+    .switch input:checked + .slider:before { transform: translateX(16px); }
+
+    /* ── Generate button ─────────────────────────────────────────────────────── */
+    .btn-generate {
+      width: 100%;
+      padding: 16px;
+      background: var(--purple);
+      color: #fff;
+      border: none;
+      border-radius: 10px;
+      font-size: 16px;
+      font-weight: 700;
+      cursor: pointer;
+      transition: all 0.15s;
+      margin-bottom: 16px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+    }
+    .btn-generate:hover { background: var(--purple-dark); }
+    .btn-generate:disabled { background: var(--purple-dim); color: #888; cursor: not-allowed; }
+
+    /* ── Progress bar (left panel) ───────────────────────────────────────────── */
+    .progress-wrap { display: none; margin-bottom: 16px; }
+    .progress-wrap.visible { display: block; }
+
+    .progress-bar-bg {
+      background: var(--border2);
+      border-radius: 4px;
+      height: 5px;
+      overflow: hidden;
+      margin-bottom: 8px;
+    }
+    .progress-bar-fill {
+      height: 100%;
+      background: var(--purple);
+      border-radius: 4px;
+      transition: width 0.4s ease;
+    }
+    .progress-message { font-size: 13px; color: var(--text3); margin-bottom: 6px; }
+
+    .error-box {
+      background: var(--red-bg);
+      border: 1px solid var(--red-border);
+      border-radius: 8px;
+      padding: 12px 14px;
+      font-size: 13px;
+      color: var(--red-text);
+      display: none;
+      margin-bottom: 16px;
+      line-height: 1.5;
+    }
+    .error-box.visible { display: block; }
+
+    /* ── Output panel content ────────────────────────────────────────────────── */
+    .output-label {
+      font-size: 11px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.8px;
+      color: var(--text4);
+      margin-bottom: 14px;
+    }
+
+    .output-empty {
+      text-align: center;
+      padding: 60px 20px;
+      color: var(--text4);
+    }
+    .output-empty .icon { font-size: 40px; margin-bottom: 12px; }
+    .output-empty p { font-size: 14px; line-height: 1.6; }
+
+    /* ── Stage timeline (right panel while running) ──────────────────────────── */
+    .processing-card {
+      display: none;
+      background: var(--bg2);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      overflow: hidden;
+    }
+    .processing-card.visible { display: block; }
+
+    .processing-header {
+      padding: 14px 16px 10px;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    .processing-title { font-size: 14px; font-weight: 700; }
+    .processing-pct { font-size: 13px; color: var(--purple-text); font-weight: 700; }
+
+    .processing-bar-bg {
+      height: 3px;
+      background: var(--border2);
+    }
+    .processing-bar-fill {
+      height: 3px;
+      background: var(--purple);
+      transition: width 0.5s ease;
+    }
+
+    .stage-timeline {
+      padding: 12px 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+    }
+
+    .tl-item {
+      display: flex;
+      align-items: flex-start;
+      gap: 10px;
+      padding: 7px 0;
+      border-bottom: 1px solid var(--border);
+    }
+    .tl-item:last-child { border-bottom: none; }
+
+    .tl-dot {
+      width: 20px;
+      height: 20px;
+      border-radius: 50%;
+      flex-shrink: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 10px;
+      margin-top: 1px;
+    }
+    .tl-dot.pending { background: var(--bg3); border: 1.5px solid var(--border2); }
+    .tl-dot.active { background: var(--purple-bg); border: 1.5px solid var(--purple); }
+    .tl-dot.done { background: var(--purple); }
+    .tl-dot.active::after { content: ''; }
+
+    .tl-spinner {
+      width: 10px; height: 10px;
+      border: 1.5px solid var(--purple-dim);
+      border-top-color: var(--purple-text);
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+      display: inline-block;
+    }
+
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    .tl-body { flex: 1; min-width: 0; }
+    .tl-label {
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--text2);
+    }
+    .tl-label.active { color: var(--purple-text); }
+    .tl-label.done { color: var(--text2); }
+    .tl-label.pending { color: var(--text4); font-weight: 500; }
+    .tl-msg { font-size: 12px; color: var(--text3); margin-top: 2px; line-height: 1.4; }
+    .tl-elapsed { font-size: 11px; color: var(--text4); margin-top: 2px; }
+
+    .processing-footer {
+      padding: 10px 16px 12px;
+      border-top: 1px solid var(--border);
+      font-size: 12px;
+      color: var(--text4);
+      text-align: center;
+    }
+    .processing-footer strong { color: var(--text3); }
+
+    /* ── Result card ─────────────────────────────────────────────────────────── */
+    .result-card {
+      background: var(--bg2);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      overflow: hidden;
+      display: none;
+    }
+    .result-card.visible { display: block; }
+
+    .video-wrap {
+      position: relative;
+      background: #000;
+      aspect-ratio: 9/16;
+      max-height: 420px;
+      overflow: hidden;
+    }
+    @media (min-width: 1024px) {
+      .video-wrap { max-height: 500px; }
+    }
+
+    video {
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+      display: block;
+    }
+
+    .result-info { padding: 14px 16px; }
+    .result-meta { font-size: 12px; color: var(--text3); line-height: 2; margin-bottom: 12px; }
+    .result-meta strong { color: var(--text2); }
+
+    .result-actions { display: flex; gap: 8px; flex-direction: column; }
+    @media (min-width: 480px) { .result-actions { flex-direction: row; } }
+
+    .btn-download {
+      flex: 1;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      padding: 11px;
+      background: var(--green);
+      color: #fff;
+      border: none;
+      border-radius: 8px;
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+      text-decoration: none;
+      transition: background 0.15s;
+    }
+    .btn-download:hover { background: #15803d; }
+
+    .btn-publer {
+      flex: 1;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      padding: 11px;
+      background: #1a1a2e;
+      color: #818cf8;
+      border: 1px solid #312e81;
+      border-radius: 8px;
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+    .btn-publer:hover { background: #1e1b4b; }
+    .btn-publer.show { display: flex; }
+
+    /* ── Modals ──────────────────────────────────────────────────────────────── */
+    .modal-overlay {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,0.75);
+      z-index: 100;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+    }
+    .modal-overlay.open { display: flex; }
+    .modal {
+      background: #181818;
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 24px;
+      width: 100%;
+      max-width: 420px;
+    }
+    .modal h3 { font-size: 16px; font-weight: 700; margin-bottom: 6px; }
+    .modal p { font-size: 13px; color: var(--text3); margin-bottom: 16px; }
+    .modal label { display: block; font-size: 12px; color: var(--text4); margin-bottom: 5px; margin-top: 12px; }
+    .modal label:first-of-type { margin-top: 0; }
+    .modal-actions { display: flex; gap: 10px; margin-top: 20px; }
+
+    /* Approval modal */
+    .modal-approval { max-width: 600px; }
+    .modal-approval h3 { color: var(--purple-text); }
+
+    .approval-tabs {
+      display: flex;
+      gap: 4px;
+      margin-bottom: 16px;
+      border-bottom: 1px solid var(--border);
+      padding-bottom: 0;
+    }
+    .atab {
+      padding: 7px 14px;
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--text4);
+      cursor: pointer;
+      border: none;
+      background: none;
+      border-bottom: 2px solid transparent;
+      margin-bottom: -1px;
+      transition: all 0.15s;
+    }
+    .atab:hover { color: var(--text2); }
+    .atab.active { color: var(--purple-text); border-bottom-color: var(--purple); }
+    .atab-panel { display: none; }
+    .atab-panel.active { display: block; }
+
+    /* Script tab */
+    .script-section label {
+      display: block; font-size: 11px; color: var(--text4);
+      font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px;
+      margin-bottom: 5px; margin-top: 14px;
+    }
+    .script-section label:first-child { margin-top: 0; }
+
+    /* Scene flow tab */
+    .scene-list { display: flex; flex-direction: column; gap: 6px; max-height: 340px; overflow-y: auto; }
+    .scene-item {
+      display: flex; gap: 10px; align-items: flex-start;
+      padding: 9px 10px;
+      background: var(--bg3);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      font-size: 12px;
+    }
+    .scene-num {
+      width: 20px; height: 20px; flex-shrink: 0;
+      background: var(--purple-bg); border: 1px solid var(--purple-dim);
+      border-radius: 50%;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 10px; font-weight: 700; color: var(--purple-text);
+    }
+    .scene-body { flex: 1; min-width: 0; }
+    .scene-file { font-weight: 600; color: var(--text2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .scene-reason { color: var(--text3); margin-top: 2px; line-height: 1.4; }
+    .scene-meta { color: var(--text4); margin-top: 4px; font-size: 11px; display: flex; gap: 8px; flex-wrap: wrap; }
+    .scene-transition { color: var(--purple-dim); }
+
+    /* Summary tab */
+    .summary-grid { display: flex; flex-direction: column; gap: 8px; }
+    .summary-row {
+      display: flex; justify-content: space-between; align-items: baseline;
+      padding: 8px 10px;
+      background: var(--bg3);
+      border: 1px solid var(--border);
+      border-radius: 7px;
+      font-size: 13px;
+    }
+    .summary-key { color: var(--text4); font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; }
+    .summary-val { color: var(--text2); font-weight: 600; text-align: right; max-width: 60%; }
+
+    .btn-modal-approve {
+      flex: 1;
+      padding: 11px;
+      background: var(--purple);
+      color: #fff;
+      border: none;
+      border-radius: 8px;
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background 0.15s;
+    }
+    .btn-modal-approve:hover { background: var(--purple-dark); }
+
+    .btn-modal-push {
+      flex: 1;
+      padding: 11px;
+      background: var(--purple);
+      color: #fff;
+      border: none;
+      border-radius: 8px;
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+    }
+    .btn-modal-cancel {
+      padding: 11px 18px;
+      background: transparent;
+      color: var(--text3);
+      border: 1px solid var(--border2);
+      border-radius: 8px;
+      font-size: 14px;
+      cursor: pointer;
+    }
+
+    .account-check-list {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 7px;
+      margin-top: 6px;
+      max-height: 220px;
+      overflow-y: auto;
+      padding-right: 2px;
+    }
+    .account-check-list::-webkit-scrollbar { width: 4px; }
+    .account-check-list::-webkit-scrollbar-track { background: transparent; }
+    .account-check-list::-webkit-scrollbar-thumb { background: #333; border-radius: 4px; }
+    .account-check-item {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 9px 10px;
+      background: var(--bg2);
+      border: 1.5px solid var(--border);
+      border-radius: 8px;
+      font-size: 12px;
+      cursor: pointer;
+      transition: border-color 0.15s, background 0.15s;
+      min-width: 0;
+      user-select: none;
+    }
+    .account-check-item:hover { background: #222; border-color: #3a3a3a; }
+    .account-check-item.selected { border-color: var(--purple); background: #1e1428; }
+    .account-check-item input[type="checkbox"] { display: none; }
+    .acc-dot {
+      width: 15px; height: 15px; min-width: 15px;
+      border: 1.5px solid #444; border-radius: 4px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 9px; color: #fff; transition: all 0.15s;
+    }
+    .account-check-item.selected .acc-dot { background: var(--purple); border-color: var(--purple); }
+    .acc-label { min-width: 0; }
+    .acc-label .acc-name { font-size: 12px; color: #ccc; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .acc-label .acc-plat { font-size: 10px; color: #555; white-space: nowrap; }
+
+    /* ── Utility ─────────────────────────────────────────────────────────────── */
+    .divider { border: none; border-top: 1px solid var(--border); margin: 20px 0; }
+
+    .toast {
+      position: fixed;
+      bottom: 20px;
+      left: 50%;
+      transform: translateX(-50%) translateY(80px);
+      background: #222;
+      color: var(--text2);
+      border: 1px solid var(--border);
+      padding: 10px 20px;
+      border-radius: 100px;
+      font-size: 13px;
+      opacity: 0;
+      transition: all 0.3s;
+      z-index: 200;
+      white-space: nowrap;
+    }
+    .toast.visible { transform: translateX(-50%) translateY(0); opacity: 1; }
+
+    /* ── Tab bar ─────────────────────────────────────────────────────────────── */
+    .tab-bar {
+      display: flex;
+      gap: 2px;
+      background: var(--bg2);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 3px;
+      margin: 0 auto;
+    }
+
+    .tab {
+      padding: 6px 14px;
+      border-radius: 6px;
+      border: none;
+      background: transparent;
+      color: var(--text3);
+      font-size: 13px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: all 0.15s;
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      white-space: nowrap;
+    }
+    .tab:hover:not(.active) { color: var(--text2); }
+    .tab.active { background: var(--purple); color: #fff; }
+
+    /* ── Tab content panels ──────────────────────────────────────────────────── */
+    .tab-content { display: none; }
+    .tab-content.active { display: block; }
+
+    /* ── Audio upload area ───────────────────────────────────────────────────── */
+    .audio-upload-row {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+      margin-bottom: 10px;
+    }
+    .audio-upload-name {
+      flex: 1;
+      font-size: 12px;
+      color: var(--text3);
+      background: var(--bg2);
+      border: 1px solid var(--border2);
+      border-radius: 8px;
+      padding: 9px 12px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .audio-upload-name.has-file { color: var(--purple-text); border-color: var(--purple-dim); }
+    .btn-upload {
+      padding: 9px 14px;
+      background: var(--bg2);
+      border: 1px solid var(--border2);
+      border-radius: 8px;
+      color: var(--text3);
+      font-size: 13px;
+      cursor: pointer;
+      white-space: nowrap;
+      transition: all 0.15s;
+      flex-shrink: 0;
+    }
+    .btn-upload:hover { border-color: #555; color: var(--text); }
+
+    /* ── Studio tab ──────────────────────────────────────────────────────────── */
+    .studio-upload-area {
+      border: 2px dashed var(--border2);
+      border-radius: 10px;
+      padding: 28px 20px;
+      text-align: center;
+      cursor: pointer;
+      transition: all 0.15s;
+      background: var(--bg2);
+    }
+    .studio-upload-area:hover { border-color: var(--purple); }
+    .studio-upload-area.has-image { border-color: var(--purple); border-style: solid; background: var(--purple-bg); }
+    .studio-upload-icon { font-size: 28px; margin-bottom: 8px; }
+    .studio-upload-label { font-size: 13px; color: var(--text3); }
+
+    .studio-model-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(90px, 1fr));
+      gap: 8px;
+      max-height: 200px;
+      overflow-y: auto;
+    }
+    .studio-model-card {
+      background: var(--bg2);
+      border: 2px solid var(--border);
+      border-radius: 8px;
+      padding: 10px 6px;
+      cursor: pointer;
+      text-align: center;
+      transition: all 0.15s;
+    }
+    .studio-model-card:hover { border-color: #555; }
+    .studio-model-card.selected { border-color: var(--purple); background: var(--purple-bg); }
+    .studio-model-name { font-size: 12px; font-weight: 600; color: var(--text2); }
+    .studio-model-region { font-size: 10px; color: var(--text4); margin-top: 2px; }
+
+    .studio-accordion { margin-bottom: 4px; }
+    .studio-acc-header {
+      width: 100%;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 10px 14px;
+      background: var(--bg2);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      color: var(--text2);
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+    .studio-acc-header:hover { background: var(--bg3); }
+    .studio-acc-arrow { font-size: 10px; color: var(--text4); }
+    .studio-acc-body {
+      padding: 14px;
+      border: 1px solid var(--border);
+      border-top: none;
+      border-radius: 0 0 8px 8px;
+      background: var(--bg);
+    }
+
+    .studio-control-group { margin-bottom: 14px; }
+    .studio-control-label {
+      font-size: 11px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      color: var(--text4);
+      margin-bottom: 7px;
+    }
+
+    .chip-group { display: flex; flex-wrap: wrap; gap: 6px; }
+    .chip {
+      padding: 6px 12px;
+      border-radius: 100px;
+      border: 1.5px solid var(--border2);
+      background: transparent;
+      color: var(--text3);
+      font-size: 12px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+    .chip:hover { border-color: #555; color: var(--text2); }
+    .chip.active {
+      background: var(--purple-bg);
+      border-color: var(--purple);
+      color: var(--purple-text);
+    }
+
+    .studio-prompt-preview { margin-top: 14px; }
+    .studio-prompt-label {
+      font-size: 11px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      color: var(--text4);
+      margin-bottom: 5px;
+    }
+    .studio-prompt-textarea {
+      width: 100%;
+      background: var(--bg2);
+      border: 1px solid var(--border);
+      border-radius: 7px;
+      color: var(--text3);
+      font-size: 12px;
+      padding: 8px 10px;
+      resize: vertical;
+      min-height: 54px;
+      line-height: 1.5;
+      font-family: inherit;
+    }
+    .studio-prompt-textarea[readonly] { cursor: default; }
+    .studio-override-toggle {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 12px;
+      color: var(--text4);
+      cursor: pointer;
+      margin-top: 6px;
+    }
+    .studio-override-toggle input { width: auto; }
+  </style>
+</head>
+<body>
+
+<header>
+  <div class="logo">Koofr<span>Reels</span></div>
+  <div class="tab-bar">
+    <button class="tab active" id="tab-btn-reels" onclick="switchTab('reels')">🎬 Reels</button>
+    <button class="tab" id="tab-btn-stock" onclick="switchTab('stock')">🎞 Stock</button>
+    <button class="tab" id="tab-btn-ai" onclick="switchTab('ai')">🤖 AI Reels</button>
+    <button class="tab" id="tab-btn-meme" onclick="switchTab('meme')">😂 Meme Clips</button>
+    <button class="tab" id="tab-btn-audio" onclick="switchTab('audio')">🎵 Audio Clips</button>
+    <button class="tab" id="tab-btn-studio" onclick="switchTab('studio')" style="display:none">✨ Studio</button>
+  </div>
+  <div class="header-right">
+    <a href="/settings" class="btn-icon">⚙ Settings</a>
+  </div>
+</header>
+
+<div class="page">
+
+  <!-- LEFT: Form -->
+  <div class="form-panel">
+
+  <!-- ═══ TAB: REELS ═══════════════════════════════════════════════════════════ -->
+  <div class="tab-content active" id="tab-reels">
+
+    <div class="prompt-block">
+      <div class="prompt-label">What's your reel about?</div>
+      <div class="prompt-sub">Describe the vibe, theme, or moment. The AI uses this to pick clips, write your title, and set the tone.</div>
+      <textarea
+        class="prompt-input"
+        id="main-prompt"
+        placeholder="e.g. golden hour at the beach, summer energy, slow motion waves..."
+        rows="3"
+        oninput="onPromptChange()"
+      ></textarea>
+    </div>
+
+    <div class="source-block">
+      <div class="section-label">Where to pull clips from</div>
+      <div class="source-pills">
+        <button class="source-pill active" onclick="switchMode('describe')" id="pill-describe">✦ AI picks</button>
+        <button class="source-pill" onclick="switchMode('browse')" id="pill-browse">🎬 Browse</button>
+        <button class="source-pill" onclick="switchMode('folder')" id="pill-folder">📁 Folder</button>
+        <button class="source-pill" onclick="switchMode('random')" id="pill-random">🎲 Random</button>
+      </div>
+
+      <div class="source-panel active" id="panel-describe">
+        <div class="source-hint">
+          Claude scores your Koofr clips by name and picks the ones that best match your prompt above. Just write what you want the reel to feel like.
+        </div>
+      </div>
+
+      <div class="source-panel" id="panel-browse">
+        <div class="field-inline" style="margin-bottom:10px">
+          <input type="text" id="browse-path" placeholder="/Summer" value="/" />
+          <button class="load-btn" onclick="loadClips()">Load</button>
+        </div>
+        <div class="subfolders" id="subfolders"></div>
+        <div class="clip-grid" id="clip-grid">
+          <p style="font-size:12px;color:var(--text4);grid-column:1/-1">Click Load to see your clips.</p>
+        </div>
+        <div class="selection-summary" id="selection-summary"></div>
+      </div>
+
+      <div class="source-panel" id="panel-folder">
+        <input type="text" id="folder-path" placeholder="/Summer/Beach" style="margin-bottom:6px" />
+        <p style="font-size:12px;color:var(--text4)">All clips in this folder will be used.</p>
+      </div>
+
+      <div class="source-panel" id="panel-random">
+        <div class="source-hint">Clips are picked at random from your Koofr library. Great for quick tests or surprise reels.</div>
+      </div>
+    </div>
+
+    <hr class="divider" />
+
+    <div class="settings-block">
+      <div class="section-label">Reel settings</div>
+
+      <div class="settings-grid">
+        <div class="setting-item" style="grid-column: 1 / -1">
+          <label>Duration</label>
+          <div class="range-wrap">
+            <input type="range" id="duration" min="15" max="90" value="30" step="5"
+              oninput="document.getElementById('dur-val').textContent = this.value + 's'" />
+            <span class="range-val" id="dur-val">30s</span>
+          </div>
+        </div>
+
+        <div class="setting-item">
+          <label>Music</label>
+          <select id="music-file">
+            <option value="">Random from library</option>
+          </select>
+        </div>
+      </div>
+
+      <div style="margin-top:12px">
+        <div class="toggle-row">
+          <span class="toggle-label">Add title &amp; caption overlay</span>
+          <label class="switch">
+            <input type="checkbox" id="include-text" checked />
+            <span class="slider"></span>
+          </label>
+        </div>
+        <div class="toggle-row">
+          <span class="toggle-label">Generate voiceover</span>
+          <label class="switch">
+            <input type="checkbox" id="include-vo" checked />
+            <span class="slider"></span>
+          </label>
+        </div>
+      </div>
+    </div>
+
+    <!-- Progress bar (compact, left panel) -->
+    <div class="progress-wrap" id="progress-wrap">
+      <div class="progress-bar-bg">
+        <div class="progress-bar-fill" id="progress-fill" style="width:0%"></div>
+      </div>
+      <div class="progress-message" id="progress-label">Starting...</div>
+    </div>
+
+    <div class="error-box" id="error-box"></div>
+
+    <button class="btn-generate" id="btn-generate" onclick="generateReel()">
+      <span id="btn-label">✦ Generate Reel</span>
+    </button>
+
+  </div><!-- /tab-reels -->
+
+  <!-- ═══ TAB: STOCK ══════════════════════════════════════════════════════════ -->
+  <div class="tab-content" id="tab-stock">
+
+    <div class="prompt-block">
+      <div class="prompt-label" id="stock-prompt-label">What's your reel about?</div>
+      <div class="prompt-sub" id="stock-prompt-sub">Claude writes an ABT-structured storyboard and searches Pexels stock video for each scene — no Koofr clips needed.</div>
+      <textarea
+        class="prompt-input"
+        id="stock-prompt"
+        placeholder="e.g. the cost of not starting your business today..."
+        rows="3"
+      ></textarea>
+    </div>
+
+    <div class="source-block">
+      <div class="section-label">Clip source</div>
+      <div class="source-hint">
+        Every scene is matched to a Pexels stock video using the AI-generated clip hint from your storyboard. Requires a Pexels API key in Settings.
+      </div>
+    </div>
+
+    <hr class="divider" />
+
+    <div class="settings-block">
+      <div class="section-label">Reel settings</div>
+      <div class="settings-grid">
+        <div class="setting-item" style="grid-column: 1 / -1">
+          <label>Duration</label>
+          <div class="range-wrap">
+            <input type="range" id="stock-duration" min="15" max="90" value="30" step="5"
+              oninput="document.getElementById('stock-dur-val').textContent = this.value + 's'" />
+            <span class="range-val" id="stock-dur-val">30s</span>
+          </div>
+        </div>
+        <div class="setting-item">
+          <label>Music</label>
+          <select id="stock-music-file">
+            <option value="">Random from library</option>
+          </select>
+        </div>
+      </div>
+      <div style="margin-top:12px">
+        <div class="toggle-row">
+          <span class="toggle-label">Add title &amp; caption overlay</span>
+          <label class="switch">
+            <input type="checkbox" id="stock-include-text" checked />
+            <span class="slider"></span>
+          </label>
+        </div>
+        <div class="toggle-row">
+          <span class="toggle-label">Generate voiceover</span>
+          <label class="switch">
+            <input type="checkbox" id="stock-include-vo" checked />
+            <span class="slider"></span>
+          </label>
+        </div>
+        <div class="toggle-row">
+          <span class="toggle-label">Use brand guidelines</span>
+          <label class="switch">
+            <input type="checkbox" id="stock-use-brand" checked />
+            <span class="slider"></span>
+          </label>
+        </div>
+        <div class="toggle-row">
+          <span class="toggle-label" style="display:flex;flex-direction:column;gap:2px">
+            Skip storyboard — use my own script
+            <span style="font-size:11px;color:#666;font-weight:400">Paste a scene-by-scene script directly. Claude and brand guidelines are skipped.</span>
+          </span>
+          <label class="switch">
+            <input type="checkbox" id="stock-skip-storyboard" onchange="toggleStockSkipStoryboard(this.checked)" />
+            <span class="slider"></span>
+          </label>
+        </div>
+      </div>
+    </div>
+
+    <div class="progress-wrap" id="stock-progress-wrap">
+      <div class="progress-bar-bg">
+        <div class="progress-bar-fill" id="stock-progress-fill" style="width:0%"></div>
+      </div>
+      <div class="progress-message" id="stock-progress-label">Starting...</div>
+    </div>
+
+    <div class="error-box" id="stock-error-box"></div>
+
+    <button class="btn-generate" id="btn-stock-generate" onclick="generateStock()">
+      <span id="btn-stock-label">🎞 Generate Stock Reel</span>
+    </button>
+
+  </div><!-- /tab-stock -->
+
+  <!-- ═══ TAB: AI REELS ════════════════════════════════════════════════════════ -->
+  <div class="tab-content" id="tab-ai">
+
+    <div class="prompt-block">
+      <div class="prompt-label" id="ai-prompt-label">What's your reel about?</div>
+      <div class="prompt-sub" id="ai-prompt-sub">Claude writes an ABT-structured storyboard and generates every clip from scratch with Google Veo3 — no stock footage needed.</div>
+      <textarea
+        class="prompt-input"
+        id="ai-prompt"
+        placeholder="e.g. why most people quit before they ever really start..."
+        rows="3"
+      ></textarea>
+    </div>
+
+    <!-- Reel type selector -->
+    <div class="source-block">
+      <div class="section-label">Reel type</div>
+      <div class="source-pills">
+        <button class="source-pill active" id="ai-rpill-story" onclick="switchAIReelType('story')">📖 Story Driven</button>
+        <button class="source-pill" id="ai-rpill-character" onclick="switchAIReelType('character')">🎭 Character Driven</button>
+      </div>
+    </div>
+
+    <!-- Story-driven: keyframe uploads (dynamic slots) -->
+    <div id="ai-panel-story">
+      <div class="section-label" style="margin-bottom:8px">
+        Keyframes <span id="ai-kf-count-label" style="color:#666;font-weight:400">(6 for 30s)</span>
+      </div>
+      <div class="source-hint" style="margin-bottom:10px">
+        One image per ~5 seconds. Each becomes the first frame of its scene. Optional — leave empty to use text-only generation.
+      </div>
+      <div id="ai-keyframe-slots" style="display:flex;flex-wrap:wrap;gap:10px"></div>
+    </div>
+
+    <!-- Character-driven: single reference image -->
+    <div id="ai-panel-character" style="display:none">
+      <div class="section-label" style="margin-bottom:8px">Character Reference Image</div>
+      <div class="source-hint" style="margin-bottom:10px">
+        This image is used as the visual anchor for every generated clip.
+      </div>
+      <div id="ai-char-drop" style="border:2px dashed #444;border-radius:8px;padding:16px;text-align:center;cursor:pointer;min-height:80px;display:flex;align-items:center;justify-content:center;flex-direction:column" onclick="document.getElementById('ai-char-input').click()">
+        <span id="ai-char-drop-label" style="color:#888;font-size:13px">Click to upload character image</span>
+        <img id="ai-char-preview" style="display:none;max-height:120px;border-radius:6px;margin-top:8px" />
+      </div>
+      <input type="file" id="ai-char-input" accept="image/*" style="display:none" onchange="handleAICharUpload(this)" />
+    </div>
+
+    <hr class="divider" />
+
+    <div class="settings-block">
+      <div class="section-label">Reel settings</div>
+      <div class="settings-grid">
+        <div class="setting-item" style="grid-column: 1 / -1">
+          <label>Duration</label>
+          <div class="range-wrap">
+            <input type="range" id="ai-duration" min="15" max="90" value="30" step="5"
+              oninput="document.getElementById('ai-dur-val').textContent = this.value + 's'; updateAIKeyframeSlots()" />
+            <span class="range-val" id="ai-dur-val">30s</span>
+          </div>
+        </div>
+        <div class="setting-item">
+          <label>Music</label>
+          <select id="ai-music-file">
+            <option value="">Random from library</option>
+          </select>
+        </div>
+      </div>
+      <div style="margin-top:12px">
+        <div class="toggle-row">
+          <span class="toggle-label">Add title &amp; caption overlay</span>
+          <label class="switch">
+            <input type="checkbox" id="ai-include-text" checked />
+            <span class="slider"></span>
+          </label>
+        </div>
+        <div class="toggle-row">
+          <span class="toggle-label">Generate voiceover</span>
+          <label class="switch">
+            <input type="checkbox" id="ai-include-vo" checked />
+            <span class="slider"></span>
+          </label>
+        </div>
+        <div class="toggle-row">
+          <span class="toggle-label">Use brand guidelines</span>
+          <label class="switch">
+            <input type="checkbox" id="ai-use-brand" checked />
+            <span class="slider"></span>
+          </label>
+        </div>
+        <div class="toggle-row">
+          <span class="toggle-label" style="display:flex;flex-direction:column;gap:2px">
+            Skip storyboard — use my own script
+            <span style="font-size:11px;color:#666;font-weight:400">Paste a scene-by-scene script directly. Claude and brand guidelines are skipped.</span>
+          </span>
+          <label class="switch">
+            <input type="checkbox" id="ai-skip-storyboard" onchange="toggleAISkipStoryboard(this.checked)" />
+            <span class="slider"></span>
+          </label>
+        </div>
+      </div>
+    </div>
+
+    <div class="progress-wrap" id="ai-progress-wrap">
+      <div class="progress-bar-bg">
+        <div class="progress-bar-fill" id="ai-progress-fill" style="width:0%"></div>
+      </div>
+      <div class="progress-message" id="ai-progress-label">Starting...</div>
+    </div>
+
+    <div class="error-box" id="ai-error-box"></div>
+
+    <button class="btn-generate" id="btn-ai-generate" onclick="generateAI()">
+      <span id="btn-ai-label">🤖 Generate AI Reel</span>
+    </button>
+
+  </div><!-- /tab-ai -->
+
+  <!-- ═══ TAB: MEME CLIPS ══════════════════════════════════════════════════════ -->
+  <div class="tab-content" id="tab-meme">
+
+    <div class="prompt-block">
+      <div class="prompt-label">What's the meme about?</div>
+      <div class="prompt-sub">Describe the situation, feeling, or joke. Claude writes the setup + punchline overlay text for you.</div>
+      <textarea
+        class="prompt-input"
+        id="meme-prompt"
+        placeholder="e.g. me trying to wake up on Monday... every single morning"
+        rows="3"
+      ></textarea>
+    </div>
+
+    <div class="source-block">
+      <div class="section-label">Clip source</div>
+      <div class="source-pills">
+        <button class="source-pill active" onclick="switchMemeMode('random')" id="mpill-random">🎲 Random</button>
+        <button class="source-pill" onclick="switchMemeMode('browse')" id="mpill-browse">🎬 Browse</button>
+      </div>
+
+      <div class="source-panel active" id="mpanel-random">
+        <div class="source-hint">A random clip is picked from your Koofr library and the meme text is burned in.</div>
+      </div>
+
+      <div class="source-panel" id="mpanel-browse">
+        <div class="field-inline" style="margin-bottom:10px">
+          <input type="text" id="meme-browse-path" placeholder="/Summer" value="/" />
+          <button class="load-btn" onclick="loadMemeClips()">Load</button>
+        </div>
+        <div class="clip-grid" id="meme-clip-grid">
+          <p style="font-size:12px;color:var(--text4);grid-column:1/-1">Click Load to see your clips.</p>
+        </div>
+        <div class="selection-summary" id="meme-selection-summary"></div>
+      </div>
+    </div>
+
+    <hr class="divider" />
+
+    <div class="settings-block">
+      <div class="section-label">Clip settings</div>
+      <div class="settings-grid">
+        <div class="setting-item" style="grid-column: 1 / -1">
+          <label>Clip length</label>
+          <div class="range-wrap">
+            <input type="range" id="meme-duration" min="3" max="30" value="8" step="1"
+              oninput="document.getElementById('meme-dur-val').textContent = this.value + 's'" />
+            <span class="range-val" id="meme-dur-val">8s</span>
+          </div>
+        </div>
+        <div class="setting-item">
+          <label>Music</label>
+          <select id="meme-music-file">
+            <option value="">Random from library</option>
+          </select>
+        </div>
+      </div>
+    </div>
+
+    <div style="margin-top:12px">
+      <div class="toggle-row">
+        <span class="toggle-label">Generate voiceover</span>
+        <label class="switch">
+          <input type="checkbox" id="meme-include-vo" checked />
+          <span class="slider"></span>
+        </label>
+      </div>
+    </div>
+
+    <div class="progress-wrap" id="meme-progress-wrap">
+      <div class="progress-bar-bg">
+        <div class="progress-bar-fill" id="meme-progress-fill" style="width:0%"></div>
+      </div>
+      <div class="progress-message" id="meme-progress-label">Starting...</div>
+    </div>
+
+    <div class="error-box" id="meme-error-box"></div>
+
+    <button class="btn-generate" id="btn-meme-generate" onclick="generateMeme()">
+      <span id="btn-meme-label">😂 Generate Meme Clip</span>
+    </button>
+
+  </div><!-- /tab-meme -->
+
+  <!-- ═══ TAB: AUDIO CLIPS ═════════════════════════════════════════════════════ -->
+  <div class="tab-content" id="tab-audio">
+
+    <div class="prompt-block">
+      <div class="prompt-label">Describe the narrative</div>
+      <div class="prompt-sub">Claude writes per-scene overlay text that tells a story synced to your audio track.</div>
+      <textarea
+        class="prompt-input"
+        id="audio-prompt"
+        placeholder="e.g. a day in the life, morning routine energy, city vibes..."
+        rows="3"
+      ></textarea>
+    </div>
+
+    <div class="source-block">
+      <div class="section-label">Trending audio track</div>
+      <div class="source-pills" style="margin-bottom:12px">
+        <button class="source-pill active" onclick="switchAudioSource('upload')" id="apill-upload">⬆ Upload file</button>
+        <button class="source-pill" onclick="switchAudioSource('library')" id="apill-library">🎵 Music library</button>
+      </div>
+
+      <div class="source-panel active" id="apanel-upload">
+        <div class="audio-upload-row">
+          <div class="audio-upload-name" id="audio-upload-name">No file chosen</div>
+          <button class="btn-upload" onclick="document.getElementById('audio-file-input').click()">Browse…</button>
+          <input type="file" id="audio-file-input" accept="audio/*" style="display:none" onchange="handleAudioUpload(this)" />
+        </div>
+        <p style="font-size:12px;color:var(--text4)">MP3, M4A, WAV supported. The audio duration sets the clip length.</p>
+      </div>
+
+      <div class="source-panel" id="apanel-library">
+        <select id="audio-library-select" style="margin-bottom:6px">
+          <option value="">Select a track…</option>
+        </select>
+        <p style="font-size:12px;color:var(--text4)">Pick a track from your music library to drive the clip.</p>
+      </div>
+    </div>
+
+    <div class="source-block" style="margin-top:16px">
+      <div class="section-label">Where to pull clips from</div>
+      <div class="source-pills">
+        <button class="source-pill active" onclick="switchAudioClipMode('describe')" id="acpill-describe">✦ AI picks</button>
+        <button class="source-pill" onclick="switchAudioClipMode('folder')" id="acpill-folder">📁 Folder</button>
+        <button class="source-pill" onclick="switchAudioClipMode('random')" id="acpill-random">🎲 Random</button>
+      </div>
+
+      <div class="source-panel active" id="acpanel-describe">
+        <div class="source-hint">Claude matches clips to your narrative by name — picks the best fit for each scene.</div>
+      </div>
+
+      <div class="source-panel" id="acpanel-folder">
+        <input type="text" id="audio-folder-path" placeholder="/Summer/Beach" style="margin-bottom:6px" />
+        <p style="font-size:12px;color:var(--text4)">All clips from this folder will be used.</p>
+      </div>
+
+      <div class="source-panel" id="acpanel-random">
+        <div class="source-hint">Clips are picked randomly from your Koofr library.</div>
+      </div>
+    </div>
+
+    <div style="margin-top:12px">
+      <div class="toggle-row">
+        <span class="toggle-label">Generate voiceover</span>
+        <label class="switch">
+          <input type="checkbox" id="audio-include-vo" checked />
+          <span class="slider"></span>
+        </label>
+      </div>
+    </div>
+
+    <div class="progress-wrap" id="audio-progress-wrap">
+      <div class="progress-bar-bg">
+        <div class="progress-bar-fill" id="audio-progress-fill" style="width:0%"></div>
+      </div>
+      <div class="progress-message" id="audio-progress-label">Starting...</div>
+    </div>
+
+    <div class="error-box" id="audio-error-box"></div>
+
+    <button class="btn-generate" id="btn-audio-generate" onclick="generateAudioClip()">
+      <span id="btn-audio-label">🎵 Generate Audio Clip</span>
+    </button>
+
+  </div><!-- /tab-audio -->
+
+  <!-- ═══ TAB: STUDIO ══════════════════════════════════════════════════════════ -->
+  <div class="tab-content" id="tab-studio">
+
+    <div class="prompt-block">
+      <div class="prompt-label">Product → AI Reel</div>
+      <div class="prompt-sub">Upload a product image. Claude and AI video APIs will generate a 5-shot reel — animated product, on model, lifestyle scene, close-up macro, and collection flatlay.</div>
+    </div>
+
+    <!-- Product image upload -->
+    <div class="source-block">
+      <div class="section-label">Product Image</div>
+      <div class="studio-upload-area" id="studio-product-drop"
+           onclick="document.getElementById('studio-product-input').click()"
+           ondragover="event.preventDefault()"
+           ondrop="handleStudioDrop(event,'product')">
+        <div class="studio-upload-icon">📦</div>
+        <div class="studio-upload-label" id="studio-product-label">Click or drag to upload product image</div>
+        <div style="font-size:11px;color:var(--text4);margin-top:4px">JPG or PNG · clean background recommended</div>
+      </div>
+      <input type="file" id="studio-product-input" accept="image/*" style="display:none" onchange="handleStudioImageUpload(this,'product')" />
+      <div style="margin-top:10px">
+        <input type="text" id="studio-product-name" placeholder="Product name (e.g. Toteaa Canvas Tote)" oninput="updateStudioPromptPreviews()" />
+      </div>
+    </div>
+
+    <!-- Model image upload + library (Shot 2) -->
+    <div class="source-block" style="margin-top:16px">
+      <div class="section-label">Model for Shot 2 <span style="color:var(--text4);font-weight:400;text-transform:none;letter-spacing:0">(optional)</span></div>
+      <div class="source-pills" style="margin-bottom:12px">
+        <button class="source-pill active" onclick="switchStudioModelSource('none')" id="studio-mpill-none">Skip Shot 2</button>
+        <button class="source-pill" onclick="switchStudioModelSource('library')" id="studio-mpill-library">Model Library</button>
+        <button class="source-pill" onclick="switchStudioModelSource('upload')" id="studio-mpill-upload">Upload Photo</button>
+      </div>
+
+      <div class="source-panel active" id="studio-mpanel-none">
+        <div class="source-hint">Shot 2 will be skipped. The reel will be 4 shots (~20 s).</div>
+      </div>
+
+      <div class="source-panel" id="studio-mpanel-library">
+        <div style="font-size:12px;color:var(--text4);margin-bottom:8px">Select a model — Shot 2 will generate using their description via Kling AI (no upload needed).</div>
+        <div class="studio-model-grid" id="studio-model-grid">
+          <div style="font-size:12px;color:var(--text4)">Loading models…</div>
+        </div>
+      </div>
+
+      <div class="source-panel" id="studio-mpanel-upload">
+        <div class="studio-upload-area" id="studio-model-drop" style="padding:14px"
+             onclick="document.getElementById('studio-model-input').click()"
+             ondragover="event.preventDefault()"
+             ondrop="handleStudioDrop(event,'model')">
+          <div class="studio-upload-label" id="studio-model-label">Click or drag to upload model photo</div>
+          <div style="font-size:11px;color:var(--text4);margin-top:4px">Used for virtual try-on (FASHN) — clear full-body photo</div>
+        </div>
+        <input type="file" id="studio-model-input" accept="image/*" style="display:none" onchange="handleStudioImageUpload(this,'model')" />
+      </div>
+    </div>
+
+    <!-- Shot controls accordion -->
+    <div class="source-block" style="margin-top:16px">
+      <div class="section-label">Shot Controls</div>
+
+      <!-- Shot 1 -->
+      <div class="studio-accordion">
+        <button class="studio-acc-header" onclick="toggleAccordion('studio-acc-1')">
+          <span>Shot 1 — Animate Product</span>
+          <span class="studio-acc-arrow" id="studio-acc-1-arrow">▼</span>
+        </button>
+        <div class="studio-acc-body" id="studio-acc-1" style="display:none">
+          <div class="studio-control-group">
+            <div class="studio-control-label">Camera Angle</div>
+            <div class="chip-group" id="chips-s1-camera">
+              <button class="chip active" onclick="selectChip(this,'chips-s1-camera','s1_camera_angle')">Eye-Level</button>
+              <button class="chip" onclick="selectChip(this,'chips-s1-camera','s1_camera_angle')">Hero (Low Angle)</button>
+              <button class="chip" onclick="selectChip(this,'chips-s1-camera','s1_camera_angle')">45-Degree</button>
+              <button class="chip" onclick="selectChip(this,'chips-s1-camera','s1_camera_angle')">Top-Down</button>
+            </div>
+          </div>
+          <div class="studio-control-group">
+            <div class="studio-control-label">Lighting</div>
+            <div class="chip-group" id="chips-s1-lighting">
+              <button class="chip active" onclick="selectChip(this,'chips-s1-lighting','s1_lighting')">Clean E-commerce</button>
+              <button class="chip" onclick="selectChip(this,'chips-s1-lighting','s1_lighting')">Dramatic</button>
+              <button class="chip" onclick="selectChip(this,'chips-s1-lighting','s1_lighting')">Natural Window</button>
+              <button class="chip" onclick="selectChip(this,'chips-s1-lighting','s1_lighting')">Golden Hour</button>
+            </div>
+          </div>
+          <div class="studio-control-group">
+            <div class="studio-control-label">Material Finish</div>
+            <div class="chip-group" id="chips-s1-material">
+              <button class="chip active" onclick="selectChip(this,'chips-s1-material','s1_material')">Matte</button>
+              <button class="chip" onclick="selectChip(this,'chips-s1-material','s1_material')">Glossy</button>
+              <button class="chip" onclick="selectChip(this,'chips-s1-material','s1_material')">Metallic</button>
+              <button class="chip" onclick="selectChip(this,'chips-s1-material','s1_material')">Glass</button>
+            </div>
+          </div>
+          <div class="studio-control-group">
+            <div class="studio-control-label">Hyper-Realism</div>
+            <div class="chip-group" id="chips-s1-hyper">
+              <button class="chip active" onclick="selectChip(this,'chips-s1-hyper','s1_hyper_realism')">Off</button>
+              <button class="chip" onclick="selectChip(this,'chips-s1-hyper','s1_hyper_realism')">On</button>
+            </div>
+          </div>
+          <div class="studio-prompt-preview">
+            <div class="studio-prompt-label">Auto-generated prompt</div>
+            <textarea class="studio-prompt-textarea" id="preview-shot1" readonly></textarea>
+            <label class="studio-override-toggle">
+              <input type="checkbox" id="override-shot1" onchange="toggleOverride(1)" /> Custom override
+            </label>
+            <textarea class="studio-prompt-textarea" id="custom-shot1" style="display:none" placeholder="Write your own prompt for Shot 1…"></textarea>
+          </div>
+        </div>
+      </div>
+
+      <!-- Shot 2 -->
+      <div class="studio-accordion">
+        <button class="studio-acc-header" onclick="toggleAccordion('studio-acc-2')">
+          <span>Shot 2 — On Model</span>
+          <span class="studio-acc-arrow" id="studio-acc-2-arrow">▼</span>
+        </button>
+        <div class="studio-acc-body" id="studio-acc-2" style="display:none">
+          <div class="studio-control-group">
+            <div class="studio-control-label">Shot Type</div>
+            <div class="chip-group" id="chips-s2-type">
+              <button class="chip active" onclick="selectChip(this,'chips-s2-type','s2_shot_type')">Full Body Front</button>
+              <button class="chip" onclick="selectChip(this,'chips-s2-type','s2_shot_type')">3/4 View</button>
+              <button class="chip" onclick="selectChip(this,'chips-s2-type','s2_shot_type')">Walking Motion</button>
+              <button class="chip" onclick="selectChip(this,'chips-s2-type','s2_shot_type')">Candid</button>
+            </div>
+          </div>
+          <div class="studio-control-group">
+            <div class="studio-control-label">Expression</div>
+            <div class="chip-group" id="chips-s2-expr">
+              <button class="chip active" onclick="selectChip(this,'chips-s2-expr','s2_expression')">Neutral</button>
+              <button class="chip" onclick="selectChip(this,'chips-s2-expr','s2_expression')">Soft Smile</button>
+              <button class="chip" onclick="selectChip(this,'chips-s2-expr','s2_expression')">Confident</button>
+              <button class="chip" onclick="selectChip(this,'chips-s2-expr','s2_expression')">Joyful</button>
+            </div>
+          </div>
+          <div class="studio-control-group">
+            <div class="studio-control-label">Product Interaction</div>
+            <div class="chip-group" id="chips-s2-interaction">
+              <button class="chip active" onclick="selectChip(this,'chips-s2-interaction','s2_product_interaction')">Holding</button>
+              <button class="chip" onclick="selectChip(this,'chips-s2-interaction','s2_product_interaction')">Wearing</button>
+              <button class="chip" onclick="selectChip(this,'chips-s2-interaction','s2_product_interaction')">Presenting</button>
+            </div>
+          </div>
+          <div class="studio-prompt-preview">
+            <div class="studio-prompt-label">Auto-generated prompt</div>
+            <textarea class="studio-prompt-textarea" id="preview-shot2" readonly></textarea>
+            <label class="studio-override-toggle">
+              <input type="checkbox" id="override-shot2" onchange="toggleOverride(2)" /> Custom override
+            </label>
+            <textarea class="studio-prompt-textarea" id="custom-shot2" style="display:none" placeholder="Write your own prompt for Shot 2…"></textarea>
+          </div>
+        </div>
+      </div>
+
+      <!-- Shot 3 -->
+      <div class="studio-accordion">
+        <button class="studio-acc-header" onclick="toggleAccordion('studio-acc-3')">
+          <span>Shot 3 — Lifestyle Scene</span>
+          <span class="studio-acc-arrow" id="studio-acc-3-arrow">▼</span>
+        </button>
+        <div class="studio-acc-body" id="studio-acc-3" style="display:none">
+          <div class="studio-control-group">
+            <div class="studio-control-label">Scene / Background</div>
+            <div class="chip-group" id="chips-s3-scene">
+              <button class="chip active" onclick="selectChip(this,'chips-s3-scene','s3_scene')">City Street</button>
+              <button class="chip" onclick="selectChip(this,'chips-s3-scene','s3_scene')">Modern Interior</button>
+              <button class="chip" onclick="selectChip(this,'chips-s3-scene','s3_scene')">Cozy Cafe</button>
+              <button class="chip" onclick="selectChip(this,'chips-s3-scene','s3_scene')">Lush Forest</button>
+              <button class="chip" onclick="selectChip(this,'chips-s3-scene','s3_scene')">Sunny Beach</button>
+              <button class="chip" onclick="selectChip(this,'chips-s3-scene','s3_scene')">Rooftop Garden</button>
+            </div>
+          </div>
+          <div class="studio-control-group">
+            <div class="studio-control-label">Lighting</div>
+            <div class="chip-group" id="chips-s3-lighting">
+              <button class="chip active" onclick="selectChip(this,'chips-s3-lighting','s3_lighting')">Golden Hour</button>
+              <button class="chip" onclick="selectChip(this,'chips-s3-lighting','s3_lighting')">Overcast Day</button>
+              <button class="chip" onclick="selectChip(this,'chips-s3-lighting','s3_lighting')">Window Light</button>
+              <button class="chip" onclick="selectChip(this,'chips-s3-lighting','s3_lighting')">Neon Glow</button>
+            </div>
+          </div>
+          <div class="studio-control-group">
+            <div class="studio-control-label">Time of Day</div>
+            <div class="chip-group" id="chips-s3-tod">
+              <button class="chip active" onclick="selectChip(this,'chips-s3-tod','s3_time_of_day')">None</button>
+              <button class="chip" onclick="selectChip(this,'chips-s3-tod','s3_time_of_day')">Sunrise</button>
+              <button class="chip" onclick="selectChip(this,'chips-s3-tod','s3_time_of_day')">Midday</button>
+              <button class="chip" onclick="selectChip(this,'chips-s3-tod','s3_time_of_day')">Golden Hour</button>
+              <button class="chip" onclick="selectChip(this,'chips-s3-tod','s3_time_of_day')">Twilight</button>
+              <button class="chip" onclick="selectChip(this,'chips-s3-tod','s3_time_of_day')">Night</button>
+            </div>
+          </div>
+          <div class="studio-prompt-preview">
+            <div class="studio-prompt-label">Auto-generated prompt</div>
+            <textarea class="studio-prompt-textarea" id="preview-shot3" readonly></textarea>
+            <label class="studio-override-toggle">
+              <input type="checkbox" id="override-shot3" onchange="toggleOverride(3)" /> Custom override
+            </label>
+            <textarea class="studio-prompt-textarea" id="custom-shot3" style="display:none" placeholder="Write your own prompt for Shot 3…"></textarea>
+          </div>
+        </div>
+      </div>
+
+      <!-- Shot 4 -->
+      <div class="studio-accordion">
+        <button class="studio-acc-header" onclick="toggleAccordion('studio-acc-4')">
+          <span>Shot 4 — Close-Up Macro</span>
+          <span class="studio-acc-arrow" id="studio-acc-4-arrow">▼</span>
+        </button>
+        <div class="studio-acc-body" id="studio-acc-4" style="display:none">
+          <div class="studio-control-group">
+            <div class="studio-control-label">Surface</div>
+            <div class="chip-group" id="chips-s4-surface">
+              <button class="chip active" onclick="selectChip(this,'chips-s4-surface','s4_surface')">Marble Slab</button>
+              <button class="chip" onclick="selectChip(this,'chips-s4-surface','s4_surface')">Polished Wood</button>
+              <button class="chip" onclick="selectChip(this,'chips-s4-surface','s4_surface')">Concrete</button>
+              <button class="chip" onclick="selectChip(this,'chips-s4-surface','s4_surface')">Brushed Metal</button>
+              <button class="chip" onclick="selectChip(this,'chips-s4-surface','s4_surface')">Black Slate</button>
+            </div>
+          </div>
+          <div class="studio-control-group">
+            <div class="studio-control-label">Camera Angle</div>
+            <div class="chip-group" id="chips-s4-camera">
+              <button class="chip active" onclick="selectChip(this,'chips-s4-camera','s4_camera_angle')">Macro Detail</button>
+              <button class="chip" onclick="selectChip(this,'chips-s4-camera','s4_camera_angle')">Close-Up</button>
+              <button class="chip" onclick="selectChip(this,'chips-s4-camera','s4_camera_angle')">45° Left</button>
+              <button class="chip" onclick="selectChip(this,'chips-s4-camera','s4_camera_angle')">45° Right</button>
+            </div>
+          </div>
+          <div class="studio-control-group">
+            <div class="studio-control-label">Light Quality</div>
+            <div class="chip-group" id="chips-s4-light">
+              <button class="chip active" onclick="selectChip(this,'chips-s4-light','s4_light_quality')">Soft</button>
+              <button class="chip" onclick="selectChip(this,'chips-s4-light','s4_light_quality')">Hard</button>
+              <button class="chip" onclick="selectChip(this,'chips-s4-light','s4_light_quality')">Ring Light</button>
+            </div>
+          </div>
+          <div class="studio-control-group">
+            <div class="studio-control-label">Shadow</div>
+            <div class="chip-group" id="chips-s4-shadow">
+              <button class="chip active" onclick="selectChip(this,'chips-s4-shadow','s4_shadow')">Soft</button>
+              <button class="chip" onclick="selectChip(this,'chips-s4-shadow','s4_shadow')">Hard</button>
+              <button class="chip" onclick="selectChip(this,'chips-s4-shadow','s4_shadow')">None</button>
+            </div>
+          </div>
+          <div class="studio-prompt-preview">
+            <div class="studio-prompt-label">Auto-generated prompt</div>
+            <textarea class="studio-prompt-textarea" id="preview-shot4" readonly></textarea>
+            <label class="studio-override-toggle">
+              <input type="checkbox" id="override-shot4" onchange="toggleOverride(4)" /> Custom override
+            </label>
+            <textarea class="studio-prompt-textarea" id="custom-shot4" style="display:none" placeholder="Write your own prompt for Shot 4…"></textarea>
+          </div>
+        </div>
+      </div>
+
+      <!-- Shot 5 -->
+      <div class="studio-accordion">
+        <button class="studio-acc-header" onclick="toggleAccordion('studio-acc-5')">
+          <span>Shot 5 — Collection Flatlay</span>
+          <span class="studio-acc-arrow" id="studio-acc-5-arrow">▼</span>
+        </button>
+        <div class="studio-acc-body" id="studio-acc-5" style="display:none">
+          <div class="studio-control-group">
+            <div class="studio-control-label">Layout Style</div>
+            <div class="chip-group" id="chips-s5-layout">
+              <button class="chip active" onclick="selectChip(this,'chips-s5-layout','s5_layout_style')">Minimal White</button>
+              <button class="chip" onclick="selectChip(this,'chips-s5-layout','s5_layout_style')">Textured Surface</button>
+              <button class="chip" onclick="selectChip(this,'chips-s5-layout','s5_layout_style')">Color-Coordinated</button>
+              <button class="chip" onclick="selectChip(this,'chips-s5-layout','s5_layout_style')">Scattered Organic</button>
+            </div>
+          </div>
+          <div class="studio-control-group">
+            <div class="studio-control-label">Camera Angle</div>
+            <div class="chip-group" id="chips-s5-camera">
+              <button class="chip active" onclick="selectChip(this,'chips-s5-camera','s5_camera_angle')">Top-Down Flat Lay</button>
+              <button class="chip" onclick="selectChip(this,'chips-s5-camera','s5_camera_angle')">Slightly Angled</button>
+            </div>
+          </div>
+          <div class="studio-control-group">
+            <div class="studio-control-label">Color Grade</div>
+            <div class="chip-group" id="chips-s5-grade">
+              <button class="chip active" onclick="selectChip(this,'chips-s5-grade','s5_color_grade')">None</button>
+              <button class="chip" onclick="selectChip(this,'chips-s5-grade','s5_color_grade')">Cinematic Teal &amp; Orange</button>
+              <button class="chip" onclick="selectChip(this,'chips-s5-grade','s5_color_grade')">Vintage Film</button>
+              <button class="chip" onclick="selectChip(this,'chips-s5-grade','s5_color_grade')">Vibrant &amp; Punchy</button>
+              <button class="chip" onclick="selectChip(this,'chips-s5-grade','s5_color_grade')">Muted &amp; Moody</button>
+              <button class="chip" onclick="selectChip(this,'chips-s5-grade','s5_color_grade')">Warm &amp; Golden</button>
+            </div>
+          </div>
+          <div class="studio-prompt-preview">
+            <div class="studio-prompt-label">Auto-generated prompt</div>
+            <textarea class="studio-prompt-textarea" id="preview-shot5" readonly></textarea>
+            <label class="studio-override-toggle">
+              <input type="checkbox" id="override-shot5" onchange="toggleOverride(5)" /> Custom override
+            </label>
+            <textarea class="studio-prompt-textarea" id="custom-shot5" style="display:none" placeholder="Write your own prompt for Shot 5…"></textarea>
+          </div>
+        </div>
+      </div>
+
+    </div><!-- /shot controls -->
+
+    <!-- Global controls -->
+    <div class="source-block" style="margin-top:16px">
+      <div class="section-label">Global Settings</div>
+      <div class="settings-grid">
+        <div class="setting-item">
+          <label>Aspect Ratio</label>
+          <div class="chip-group" id="chips-studio-ratio">
+            <button class="chip active" onclick="selectChip(this,'chips-studio-ratio','studio_aspect_ratio')">9:16</button>
+            <button class="chip" onclick="selectChip(this,'chips-studio-ratio','studio_aspect_ratio')">1:1</button>
+            <button class="chip" onclick="selectChip(this,'chips-studio-ratio','studio_aspect_ratio')">3:4</button>
+          </div>
+        </div>
+        <div class="setting-item">
+          <label>Music</label>
+          <select id="studio-music-file">
+            <option value="">No music</option>
+          </select>
+        </div>
+        <div class="setting-item" style="grid-column:1/-1">
+          <label>Negative Prompt <span style="color:var(--text4);font-weight:400;text-transform:none;letter-spacing:0">(optional — words to avoid)</span></label>
+          <textarea id="studio-negative-prompt" rows="2" placeholder="e.g. blurry, pixelated, distorted faces" style="resize:vertical"></textarea>
+        </div>
+      </div>
+    </div>
+
+    <div class="progress-wrap" id="studio-progress-wrap">
+      <div class="progress-bar-bg">
+        <div class="progress-bar-fill" id="studio-progress-fill" style="width:0%"></div>
+      </div>
+      <div class="progress-message" id="studio-progress-label">Starting…</div>
+    </div>
+
+    <div class="error-box" id="studio-error-box"></div>
+
+    <button class="btn-generate" id="btn-studio-generate" onclick="generateStudio()">
+      <span id="btn-studio-label">✨ Generate Studio Reel</span>
+    </button>
+
+  </div><!-- /tab-studio -->
+
+  </div><!-- /form-panel -->
+
+  <!-- RIGHT: Output -->
+  <div class="output-panel">
+    <div class="output-label">Output</div>
+
+    <!-- Empty state -->
+    <div class="output-empty" id="output-empty">
+      <div class="icon">🎬</div>
+      <p>Configure your clip and hit Generate.<br>Your video will appear here.</p>
+    </div>
+
+    <!-- Processing / stage timeline -->
+    <div class="processing-card" id="processing-card">
+      <div class="processing-header">
+        <div class="processing-title">Working on your reel…</div>
+        <div class="processing-pct" id="proc-pct">0%</div>
+      </div>
+      <div class="processing-bar-bg">
+        <div class="processing-bar-fill" id="proc-bar" style="width:0%"></div>
+      </div>
+      <div class="stage-timeline" id="stage-timeline"></div>
+      <div class="processing-footer" id="proc-footer">
+        Step in progress — <strong id="proc-elapsed">0s</strong> elapsed
+      </div>
+    </div>
+
+    <!-- Result -->
+    <div class="result-card" id="result-card">
+      <div class="video-wrap">
+        <video id="preview-video" controls playsinline></video>
+      </div>
+      <div class="result-info">
+        <div class="result-meta" id="result-meta"></div>
+        <div class="result-actions">
+          <a class="btn-download" id="btn-download" href="#" download="reel.mp4">↓ Download MP4</a>
+          <button class="btn-publer" id="btn-publer" onclick="openPublerModal()">📤 Push to Publer</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ── Approval modal ───────────────────────────────────────────────────────── -->
+<div class="modal-overlay" id="approval-modal">
+  <div class="modal modal-approval">
+    <h3>✦ Review &amp; Approve Plan</h3>
+    <p>Claude planned your reel. Review the script, scene order, and settings — edit anything before rendering starts.</p>
+
+    <div class="approval-tabs">
+      <button class="atab active" onclick="switchApprovalTab('script', this)">Scenes &amp; Script</button>
+      <button class="atab" onclick="switchApprovalTab('summary', this)">Summary</button>
+      <button class="atab" id="atab-policy-btn" onclick="switchApprovalTab('policy', this)" style="display:none">⚠ Policy Review</button>
+    </div>
+
+    <!-- Tab: Scenes (editable per-scene script) -->
+    <div class="atab-panel active" id="atab-script">
+      <div class="scene-list" id="approval-scene-list"></div>
+    </div>
+
+    <!-- Tab: Summary -->
+    <div class="atab-panel" id="atab-summary">
+      <div class="summary-grid" id="approval-summary-grid"></div>
+    </div>
+
+    <!-- Tab: Policy Review (AI Reels only) -->
+    <div class="atab-panel" id="atab-policy">
+      <div id="approval-policy-list"></div>
+    </div>
+
+    <div class="modal-actions">
+      <button class="btn-modal-cancel" onclick="cancelApproval()">Cancel</button>
+      <button class="btn-modal-approve" onclick="submitApproval()">Approve &amp; Render ▶</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── Publer modal ─────────────────────────────────────────────────────────── -->
+<div class="modal-overlay" id="publer-modal">
+  <div class="modal">
+    <h3>Push to Publer</h3>
+    <label>Select accounts</label>
+    <div class="account-check-list" id="modal-accounts">
+      <p style="font-size:12px;color:var(--text4);grid-column:1/-1">Loading accounts...</p>
+    </div>
+    <label>Caption</label>
+    <textarea id="publer-caption" rows="2" placeholder="Write your caption..."></textarea>
+    <div class="modal-actions">
+      <button class="btn-modal-cancel" onclick="closePublerModal()">Cancel</button>
+      <button class="btn-modal-push" onclick="pushToPubler()">Push to Queue</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+  const API = '';
+
+  // ── Tab state ───────────────────────────────────────────────────────────────
+  let currentTab = 'reels';
+
+  function switchTab(tab) {
+    currentTab = tab;
+    ['reels', 'stock', 'ai', 'meme', 'audio', 'studio'].forEach(t => {
+      document.getElementById('tab-' + t).classList.toggle('active', t === tab);
+      document.getElementById('tab-btn-' + t).classList.toggle('active', t === tab);
+    });
+    hideResult();
+    hideAllErrors();
+  }
+
+  // ── Stage defs per module ───────────────────────────────────────────────────
+  const STAGE_DEFS_MAP = {
+    reels: [
+      { id: 'brief',          label: 'Processing Brief' },
+      { id: 'storyboard',     label: "Director's Storyboard" },
+      { id: 'voiceover',      label: 'Generating Voiceover' },
+      { id: 'clip_selection', label: 'Selecting Clips' },
+      { id: 'edit_decisions', label: 'Planning the Edit' },
+      { id: 'compose',        label: 'Composing Reel' },
+      { id: 'final_review',   label: 'Quality Review' },
+      { id: 'deliver',        label: 'Ready!' },
+    ],
+    stock: [
+      { id: 'brief',          label: 'Processing Brief' },
+      { id: 'storyboard',     label: "Director's Storyboard" },
+      { id: 'voiceover',      label: 'Generating Voiceover' },
+      { id: 'clip_selection', label: 'Searching Pexels' },
+      { id: 'edit_decisions', label: 'Planning the Edit' },
+      { id: 'compose',        label: 'Composing Reel' },
+      { id: 'final_review',   label: 'Quality Review' },
+      { id: 'deliver',        label: 'Ready!' },
+    ],
+    ai: [
+      { id: 'brief',          label: 'Processing Brief' },
+      { id: 'storyboard',     label: "Director's Storyboard" },
+      { id: 'voiceover',      label: 'Generating Voiceover' },
+      { id: 'clip_selection', label: 'Generating AI Clips' },
+      { id: 'edit_decisions', label: 'Planning the Edit' },
+      { id: 'compose',        label: 'Composing Reel' },
+      { id: 'final_review',   label: 'Quality Review' },
+      { id: 'deliver',        label: 'Ready!' },
+    ],
+    meme: [
+      { id: 'brief',          label: 'Processing Brief' },
+      { id: 'clip_selection', label: 'Fetching Clip' },
+      { id: 'storyboard',     label: 'Generating Meme Text' },
+      { id: 'compose',        label: 'Rendering Meme' },
+      { id: 'deliver',        label: 'Ready!' },
+    ],
+    audio: [
+      { id: 'brief',          label: 'Processing Brief' },
+      { id: 'storyboard',     label: 'Analyzing Audio & Writing Overlays' },
+      { id: 'clip_selection', label: 'Selecting Clips' },
+      { id: 'compose',        label: 'Composing Video' },
+      { id: 'deliver',        label: 'Ready!' },
+    ],
+    studio: [
+      { id: 'brief',          label: 'Processing Brief' },
+      { id: 'shot_plan',      label: 'Planning Shots' },
+      { id: 'generate_shots', label: 'Generating AI Shots' },
+      { id: 'normalize',      label: 'Normalizing Clips' },
+      { id: 'compose',        label: 'Composing Reel' },
+      { id: 'final_review',   label: 'Quality Review' },
+      { id: 'deliver',        label: 'Ready!' },
+    ],
+  };
+
+  function getStageDefs() { return STAGE_DEFS_MAP[currentTab] || STAGE_DEFS_MAP.reels; }
+
+  // ── Reels state ─────────────────────────────────────────────────────────────
+  let currentMode = 'describe';
+  let selectedClipIds = [];
+
+  // ── Meme state ──────────────────────────────────────────────────────────────
+  let currentMemeMode = 'random';
+  let selectedMemeClipId = null;
+
+  // ── Audio state ─────────────────────────────────────────────────────────────
+  let currentAudioSource = 'upload';
+  let currentAudioClipMode = 'describe';
+  let uploadedAudioPath = null;
+
+  // ── Shared job state ─────────────────────────────────────────────────────────
+  let pollInterval = null;
+  let currentJobId = null;
+  let publerEnabled = false;
+  let jobStartMs = null;
+  let elapsedInterval = null;
+
+  function onPromptChange() {
+    const val = document.getElementById('main-prompt').value.trim();
+    if (val && currentMode === 'random') switchMode('describe');
+  }
+
+  function switchMode(mode) {
+    currentMode = mode;
+    ['describe','browse','folder','random'].forEach(m => {
+      document.getElementById(`pill-${m}`).classList.toggle('active', m === mode);
+      document.getElementById(`panel-${m}`).classList.toggle('active', m === mode);
+    });
+  }
+
+  async function loadMusicTracks() {
+    try {
+      const r = await fetch(`${API}/music/tracks`);
+      const data = await r.json();
+      const tracks = data.tracks || [];
+      ['music-file', 'stock-music-file', 'ai-music-file', 'meme-music-file', 'audio-library-select', 'studio-music-file'].forEach(selId => {
+        const sel = document.getElementById(selId);
+        if (!sel) return;
+        tracks.forEach(t => {
+          const opt = document.createElement('option');
+          opt.value = t.filename;
+          opt.textContent = t.filename;
+          sel.appendChild(opt);
+        });
+      });
+    } catch {}
+  }
+
+  async function loadSettings() {
+    try {
+      const r = await fetch(`${API}/api/settings`);
+      const s = await r.json();
+      publerEnabled = !!s.publer_enabled;
+    } catch {}
+  }
+
+  async function loadClips(path) {
+    path = path || document.getElementById('browse-path').value || '/';
+    document.getElementById('browse-path').value = path;
+    const grid = document.getElementById('clip-grid');
+    grid.innerHTML = '<p style="font-size:12px;color:var(--text4);grid-column:1/-1">Loading...</p>';
+
+    try {
+      const r = await fetch(`${API}/koofr/clips?path=${encodeURIComponent(path)}`);
+      const data = await r.json();
+
+      const sfDiv = document.getElementById('subfolders');
+      sfDiv.innerHTML = '';
+      (data.subfolders || []).forEach(sf => {
+        const btn = document.createElement('button');
+        btn.className = 'subfolder-btn';
+        btn.textContent = '📁 ' + sf.name;
+        btn.onclick = () => loadClips(sf.path);
+        sfDiv.appendChild(btn);
+      });
+
+      grid.innerHTML = '';
+      if (!data.clips || !data.clips.length) {
+        grid.innerHTML = '<p style="font-size:12px;color:var(--text4);grid-column:1/-1">No clips in this folder.</p>';
+        return;
+      }
+      data.clips.forEach(clip => {
+        const card = document.createElement('div');
+        card.className = 'clip-card' + (selectedClipIds.includes(clip.file_id) ? ' selected' : '');
+        const mb = (clip.size_bytes / 1024 / 1024).toFixed(1);
+        card.innerHTML = `
+          <div style="font-size:22px">🎬</div>
+          <div class="filename">${clip.name}</div>
+          <div class="filesize">${mb} MB</div>
+          <div class="check">✓</div>`;
+        card.onclick = () => toggleClip(clip.file_id, card);
+        grid.appendChild(card);
+      });
+      updateSelectionSummary();
+    } catch (e) {
+      grid.innerHTML = `<p style="font-size:12px;color:var(--red-text);grid-column:1/-1">Error: ${e.message}</p>`;
+    }
+  }
+
+  function toggleClip(id, card) {
+    if (selectedClipIds.includes(id)) {
+      selectedClipIds = selectedClipIds.filter(x => x !== id);
+      card.classList.remove('selected');
+    } else {
+      selectedClipIds.push(id);
+      card.classList.add('selected');
+    }
+    updateSelectionSummary();
+  }
+
+  function updateSelectionSummary() {
+    const s = document.getElementById('selection-summary');
+    s.innerHTML = selectedClipIds.length
+      ? `<strong>${selectedClipIds.length}</strong> clip${selectedClipIds.length !== 1 ? 's' : ''} selected`
+      : '';
+  }
+
+  // ── Generate ────────────────────────────────────────────────────────────────
+  async function generateReel() {
+    const btn = document.getElementById('btn-generate');
+    const label = document.getElementById('btn-label');
+    btn.disabled = true;
+    label.textContent = 'Generating...';
+    showProgress(true);
+    hideResult();
+    hideError();
+    showProcessingCard(true);
+
+    const mainPrompt = document.getElementById('main-prompt').value.trim();
+
+    const body = {
+      mode: currentMode,
+      target_duration_seconds: parseInt(document.getElementById('duration').value),
+      music_file: document.getElementById('music-file').value || null,
+      include_text: document.getElementById('include-text').checked,
+      include_voiceover: document.getElementById('include-vo').checked,
+      prompt: mainPrompt || null,
+      text_hints: mainPrompt || null,
+    };
+
+    if (currentMode === 'browse') {
+      if (!selectedClipIds.length) {
+        showError('Switch to Browse mode and select at least one clip first.');
+        btn.disabled = false;
+        label.textContent = '✦ Generate Reel';
+        showProgress(false);
+        showProcessingCard(false);
+        return;
+      }
+      body.clip_ids = selectedClipIds;
+    } else if (currentMode === 'folder') {
+      body.koofr_folder = document.getElementById('folder-path').value || '/';
+    }
+
+    try {
+      const r = await fetch(`${API}/reel/generate`, {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify(body),
+      });
+      if (!r.ok) {
+        const err = await r.json();
+        throw new Error(err.detail || 'Request failed');
+      }
+      const { job_id } = await r.json();
+      currentJobId = job_id;
+      jobStartMs = Date.now();
+      startElapsedTimer();
+      pollJob(job_id);
+    } catch (e) {
+      showError(e.message);
+      btn.disabled = false;
+      label.textContent = '✦ Generate Reel';
+      showProgress(false);
+      showProcessingCard(false);
+    }
+  }
+
+  // ── Elapsed timer ───────────────────────────────────────────────────────────
+  function startElapsedTimer() {
+    clearInterval(elapsedInterval);
+    elapsedInterval = setInterval(() => {
+      if (!jobStartMs) return;
+      const secs = Math.round((Date.now() - jobStartMs) / 1000);
+      const el = document.getElementById('proc-elapsed');
+      if (el) {
+        if (secs < 60) el.textContent = secs + 's';
+        else el.textContent = Math.floor(secs / 60) + 'm ' + (secs % 60) + 's';
+      }
+    }, 1000);
+  }
+
+  function stopElapsedTimer() {
+    clearInterval(elapsedInterval);
+    elapsedInterval = null;
+  }
+
+  // ── Poll ────────────────────────────────────────────────────────────────────
+  function pollJob(jobId) {
+    clearInterval(pollInterval);
+    pollInterval = setInterval(async () => {
+      try {
+        const r = await fetch(`${API}/reel/status/${jobId}`);
+        if (!r.ok) {
+          clearInterval(pollInterval);
+          stopElapsedTimer();
+          showProcessingCard(false);
+          showError(r.status === 404 ? 'Job not found — the server may have restarted. Please try again.' : `Server error: ${r.status}`);
+          showProgress(false);
+          resetBtn();
+          return;
+        }
+        const job = await r.json();
+
+        updateProgress(job);
+        renderStageTimeline(job.stage_log || []);
+
+        if (job.status === 'awaiting_approval') {
+          clearInterval(pollInterval);
+          stopElapsedTimer();
+          openApprovalModal(job);
+        } else if (job.status === 'completed') {
+          clearInterval(pollInterval);
+          stopElapsedTimer();
+          showProcessingCard(false);
+          showResult(job, jobId);
+          resetBtn();
+        } else if (job.status === 'failed') {
+          clearInterval(pollInterval);
+          stopElapsedTimer();
+          showProcessingCard(false);
+          showError(job.error || 'Pipeline failed — check your Koofr credentials and try again.');
+          showProgress(false);
+          resetBtn();
+        }
+      } catch {}
+    }, 2000);
+  }
+
+  function resetBtn() { resetActiveBtn(); }
+
+  function updateProgress(job) {
+    const pct = job.progress_pct || 0;
+    document.getElementById('progress-fill').style.width = pct + '%';
+    document.getElementById('progress-label').textContent = job.message || '...';
+    document.getElementById('proc-bar').style.width = pct + '%';
+    document.getElementById('proc-pct').textContent = pct + '%';
+  }
+
+  // ── Stage timeline renderer ─────────────────────────────────────────────────
+  function renderStageTimeline(stageLog) {
+    const container = document.getElementById('stage-timeline');
+    const logById = {};
+    stageLog.forEach(s => { logById[s.id] = s; });
+
+    const now = Date.now();
+
+    container.innerHTML = getStageDefs().map(def => {
+      const entry = logById[def.id];
+
+      if (!entry) {
+        // Not started yet — show as pending (only after an active/done stage exists)
+        return `
+          <div class="tl-item">
+            <div class="tl-dot pending"></div>
+            <div class="tl-body">
+              <div class="tl-label pending">${def.label}</div>
+            </div>
+          </div>`;
+      }
+
+      if (entry.status === 'done') {
+        const dur = entry.duration_ms != null ? formatDur(entry.duration_ms) : '';
+        return `
+          <div class="tl-item">
+            <div class="tl-dot done">✓</div>
+            <div class="tl-body">
+              <div class="tl-label done">${def.label}</div>
+              ${entry.message ? `<div class="tl-msg">${esc(entry.message)}</div>` : ''}
+              ${dur ? `<div class="tl-elapsed">${dur}</div>` : ''}
+            </div>
+          </div>`;
+      }
+
+      // active
+      let elapsed = '';
+      if (entry.started_at) {
+        const startMs = new Date(entry.started_at).getTime();
+        const diffMs = now - startMs;
+        elapsed = formatDur(diffMs);
+      }
+      return `
+        <div class="tl-item">
+          <div class="tl-dot active"><span class="tl-spinner"></span></div>
+          <div class="tl-body">
+            <div class="tl-label active">${def.label}</div>
+            ${entry.message ? `<div class="tl-msg">${esc(entry.message)}</div>` : ''}
+            ${elapsed ? `<div class="tl-elapsed">${elapsed} elapsed</div>` : ''}
+          </div>
+        </div>`;
+    }).join('');
+  }
+
+  function formatDur(ms) {
+    if (ms < 1000) return ms + 'ms';
+    const s = Math.round(ms / 1000);
+    if (s < 60) return s + 's';
+    return Math.floor(s / 60) + 'm ' + (s % 60) + 's';
+  }
+
+  function esc(str) {
+    return String(str)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;');
+  }
+
+  // ── Approval modal ──────────────────────────────────────────────────────────
+  function switchApprovalTab(id, btn) {
+    document.querySelectorAll('.atab').forEach(b => b.classList.remove('active'));
+    document.querySelectorAll('.atab-panel').forEach(p => p.classList.remove('active'));
+    btn.classList.add('active');
+    document.getElementById('atab-' + id).classList.add('active');
+  }
+
+  function openApprovalModal(job) {
+    const data = job.approval_data || {};
+    const storyboard = data.storyboard || {};
+    const scenes = storyboard.scenes || [];
+    const summary = data.reel_summary || {};
+    const policyFlags = data.policy_flags || [];
+
+    // Scenes & Script tab — one editable card per scene
+    const sceneList = document.getElementById('approval-scene-list');
+    if (!scenes.length) {
+      sceneList.innerHTML = '<p style="font-size:12px;color:var(--text4);padding:10px 0">No scene data generated.</p>';
+    } else {
+      sceneList.innerHTML = scenes.map(s => `
+        <div class="scene-item" style="flex-direction:column;gap:8px" data-scene="${s.scene}">
+          <div style="display:flex;align-items:center;gap:10px">
+            <div class="scene-num">${s.scene}</div>
+            <div class="scene-body">
+              <div class="scene-file" style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--purple-text)">${esc(s.role || '')}</div>
+              <div class="scene-reason">${esc(s.visual_description || '')}</div>
+              <div class="scene-meta"><span>⏱ ${s.duration_seconds}s</span>${s.clip_hint ? `<span>🔍 ${esc(s.clip_hint)}</span>` : ''}</div>
+            </div>
+          </div>
+          <div style="padding-left:30px;display:flex;flex-direction:column;gap:6px">
+            <label style="font-size:10px;color:var(--text4);font-weight:700;text-transform:uppercase;letter-spacing:.5px">On-screen text</label>
+            <input type="text" class="scene-overlay-input" data-scene="${s.scene}"
+              value="${esc(s.overlay_text || '')}" placeholder="Text overlay for scene ${s.scene}…"
+              style="font-size:12px;padding:7px 10px" />
+            <label style="font-size:10px;color:var(--text4);font-weight:700;text-transform:uppercase;letter-spacing:.5px">Voiceover</label>
+            <textarea class="scene-voiceover-input" data-scene="${s.scene}" rows="2"
+              placeholder="Spoken narration for scene ${s.scene}…"
+              style="font-size:12px;padding:7px 10px;resize:vertical">${esc(s.voiceover || '')}</textarea>
+          </div>
+        </div>`).join('');
+    }
+
+    // Summary tab
+    const grid = document.getElementById('approval-summary-grid');
+    const rows = [
+      ['Theme', storyboard.theme || '—'],
+      ['Mode', summary.mode || '—'],
+      ['Prompt', summary.prompt || '(none)'],
+      ['Target duration', summary.target_duration_seconds ? summary.target_duration_seconds + 's' : '—'],
+      ['Scenes', summary.scene_count != null ? summary.scene_count : '—'],
+      ['Music', summary.music_file || 'Random from library'],
+    ];
+    grid.innerHTML = rows.map(([k, v]) => `
+      <div class="summary-row">
+        <span class="summary-key">${k}</span>
+        <span class="summary-val">${esc(String(v))}</span>
+      </div>`).join('');
+
+    // Policy Review tab — show only when flags exist (AI Reels mode)
+    const policyBtn = document.getElementById('atab-policy-btn');
+    const policyList = document.getElementById('approval-policy-list');
+    if (policyFlags.length) {
+      policyBtn.style.display = '';
+      policyBtn.textContent = `⚠ Policy Review (${policyFlags.length})`;
+      policyList.innerHTML = `
+        <div style="padding:10px 0 6px;font-size:12px;color:var(--text3);line-height:1.6">
+          These scenes have words that may trigger Google Veo3 content filters.<br>
+          Edit the <strong>visual description</strong> or <strong>clip hint</strong> in the Scenes tab before approving.
+        </div>
+        ${policyFlags.map(f => `
+          <div style="border:1px solid #3a2a1a;border-radius:8px;padding:12px;margin-bottom:8px;background:#1e1208">
+            <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
+              <span style="background:#c0510a;color:#fff;border-radius:4px;padding:2px 7px;font-size:10px;font-weight:700">Scene ${f.scene}</span>
+              <span style="font-size:11px;color:#aaa;text-transform:uppercase;letter-spacing:.5px">${esc(f.role)}</span>
+            </div>
+            <ul style="margin:0;padding-left:16px;font-size:12px;color:#e0956a;line-height:1.7">
+              ${f.flags.map(fl => `<li>${esc(fl)}</li>`).join('')}
+            </ul>
+          </div>`).join('')}`;
+    } else {
+      policyBtn.style.display = 'none';
+      policyList.innerHTML = '';
+    }
+
+    switchApprovalTab('script', document.querySelector('.atab'));
+    document.getElementById('approval-modal').classList.add('open');
+  }
+
+  async function submitApproval() {
+    if (!currentJobId) return;
+
+    // Collect edited overlay_text + voiceover for each scene
+    const scenes = [];
+    document.querySelectorAll('.scene-overlay-input').forEach(inp => {
+      const sceneNum = parseInt(inp.dataset.scene);
+      const voEl = document.querySelector(`.scene-voiceover-input[data-scene="${sceneNum}"]`);
+      scenes.push({
+        scene: sceneNum,
+        overlay_text: inp.value.trim(),
+        voiceover: voEl ? voEl.value.trim() : '',
+      });
+    });
+
+    document.getElementById('approval-modal').classList.remove('open');
+    showProcessingCard(true);
+    jobStartMs = Date.now();
+    startElapsedTimer();
+
+    try {
+      const approveBase = currentTab === 'studio' ? 'studio' : currentTab === 'ai' ? 'ai' : 'reel';
+      const r = await fetch(`${API}/${approveBase}/${currentJobId}/approve`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ scenes }),
+      });
+      if (!r.ok) throw new Error((await r.json()).detail);
+      pollJob(currentJobId);
+    } catch (e) {
+      showError('Approval failed: ' + e.message);
+      showProcessingCard(false);
+      showProgress(false);
+      resetBtn();
+    }
+  }
+
+  function cancelApproval() {
+    document.getElementById('approval-modal').classList.remove('open');
+    showProcessingCard(false);
+    showProgress(false);
+    resetBtn();
+    clearInterval(pollInterval);
+    stopElapsedTimer();
+  }
+
+  // ── Visibility helpers ──────────────────────────────────────────────────────
+  function showProgress(show) {
+    document.getElementById('progress-wrap').classList.toggle('visible', show);
+  }
+
+  function showProcessingCard(show) {
+    document.getElementById('output-empty').style.display = show ? 'none' : 'block';
+    document.getElementById('processing-card').classList.toggle('visible', show);
+  }
+
+  function showResult(job, jobId) {
+    showProgress(false);
+    showProcessingCard(false);
+    document.getElementById('output-empty').style.display = 'none';
+    const card = document.getElementById('result-card');
+    card.classList.add('visible');
+
+    document.getElementById('preview-video').src = `${API}/reel/download/${jobId}`;
+
+    const res = job.result || {};
+    let meta = '';
+    meta += `<strong>Duration:</strong> ${(res.duration_seconds || 0).toFixed(1)}s &nbsp;`;
+    meta += `<strong>Size:</strong> ${((res.file_size_bytes || 0) / 1024 / 1024).toFixed(1)} MB &nbsp;`;
+    meta += `<strong>Clips:</strong> ${res.clips_used || 0}`;
+    if (res.text?.title) meta += `<br><strong>Title:</strong> ${res.text.title}`;
+    if (res.text?.caption) meta += `<br><strong>Caption:</strong> ${res.text.caption}`;
+    document.getElementById('result-meta').innerHTML = meta;
+    document.getElementById('btn-download').href = `${API}/reel/download/${jobId}`;
+    document.getElementById('btn-publer').classList.toggle('show', publerEnabled);
+
+    if (window.innerWidth < 1024) {
+      card.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+  }
+
+  function hideResult() {
+    document.getElementById('result-card').classList.remove('visible');
+    document.getElementById('output-empty').style.display = 'block';
+  }
+
+  function showError(msg) {
+    showModuleError(currentTab, msg);
+  }
+
+  function hideError() {
+    hideAllErrors();
+  }
+
+  // ── Publer modal ────────────────────────────────────────────────────────────
+  async function openPublerModal() {
+    document.getElementById('publer-modal').classList.add('open');
+    const container = document.getElementById('modal-accounts');
+    container.innerHTML = '<p style="font-size:12px;color:var(--text4);grid-column:1/-1">Loading...</p>';
+    try {
+      const r = await fetch(`${API}/api/publer/accounts`);
+      const data = await r.json();
+      const accounts = data.accounts || [];
+      if (!accounts.length) {
+        container.innerHTML = '<p style="font-size:12px;color:var(--text4);grid-column:1/-1">No accounts found. Check Publer settings.</p>';
+        return;
+      }
+      container.innerHTML = '';
+      accounts.forEach(acc => {
+        const item = document.createElement('div');
+        item.className = 'account-check-item';
+        item.dataset.id = acc.id;
+        item.innerHTML = `
+          <input type="checkbox" name="publer-acc" value="${acc.id}" />
+          <div class="acc-dot"></div>
+          <div class="acc-label">
+            <div class="acc-name">${acc.name || acc.username || 'Account'}</div>
+            <div class="acc-plat">${acc.platform || ''}</div>
+          </div>`;
+        item.addEventListener('click', () => {
+          const cb = item.querySelector('input');
+          cb.checked = !cb.checked;
+          item.classList.toggle('selected', cb.checked);
+          item.querySelector('.acc-dot').textContent = cb.checked ? '✓' : '';
+        });
+        container.appendChild(item);
+      });
+    } catch (e) {
+      container.innerHTML = `<p style="font-size:12px;color:var(--red-text);grid-column:1/-1">Error: ${e.message}</p>`;
+    }
+  }
+
+  function closePublerModal() {
+    document.getElementById('publer-modal').classList.remove('open');
+  }
+
+  async function pushToPubler() {
+    if (!currentJobId) return;
+    const checked = [...document.querySelectorAll('input[name="publer-acc"]:checked')].map(i => i.value);
+    if (!checked.length) { toast('Select at least one account'); return; }
+    const caption = document.getElementById('publer-caption').value;
+
+    try {
+      const r = await fetch(`${API}/api/publer/push`, {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({ job_id: currentJobId, account_ids: checked, caption }),
+      });
+      if (!r.ok) throw new Error((await r.json()).detail);
+      closePublerModal();
+      toast('Pushed to Publer queue ✓');
+    } catch (e) {
+      toast('Push failed: ' + e.message);
+    }
+  }
+
+  function toast(msg) {
+    const t = document.getElementById('toast');
+    t.textContent = msg;
+    t.classList.add('visible');
+    setTimeout(() => t.classList.remove('visible'), 2800);
+  }
+
+  function hideAllErrors() {
+    ['error-box', 'stock-error-box', 'ai-error-box', 'meme-error-box', 'audio-error-box', 'studio-error-box'].forEach(id => {
+      const el = document.getElementById(id);
+      if (el) el.classList.remove('visible');
+    });
+  }
+
+  // ── Meme tab helpers ────────────────────────────────────────────────────────
+  function switchMemeMode(mode) {
+    currentMemeMode = mode;
+    ['random', 'browse'].forEach(m => {
+      document.getElementById(`mpill-${m}`).classList.toggle('active', m === mode);
+      document.getElementById(`mpanel-${m}`).classList.toggle('active', m === mode);
+    });
+  }
+
+  async function loadMemeClips() {
+    const path = document.getElementById('meme-browse-path').value || '/';
+    const grid = document.getElementById('meme-clip-grid');
+    grid.innerHTML = '<p style="font-size:12px;color:var(--text4);grid-column:1/-1">Loading...</p>';
+    try {
+      const r = await fetch(`${API}/koofr/clips?path=${encodeURIComponent(path)}`);
+      const data = await r.json();
+      grid.innerHTML = '';
+      if (!data.clips || !data.clips.length) {
+        grid.innerHTML = '<p style="font-size:12px;color:var(--text4);grid-column:1/-1">No clips found.</p>';
+        return;
+      }
+      data.clips.forEach(clip => {
+        const card = document.createElement('div');
+        card.className = 'clip-card' + (selectedMemeClipId === clip.file_id ? ' selected' : '');
+        const mb = (clip.size_bytes / 1024 / 1024).toFixed(1);
+        card.innerHTML = `<div style="font-size:22px">🎬</div>
+          <div class="filename">${clip.name}</div>
+          <div class="filesize">${mb} MB</div>
+          <div class="check">✓</div>`;
+        card.onclick = () => {
+          selectedMemeClipId = selectedMemeClipId === clip.file_id ? null : clip.file_id;
+          grid.querySelectorAll('.clip-card').forEach(c => c.classList.remove('selected'));
+          if (selectedMemeClipId) card.classList.add('selected');
+          document.getElementById('meme-selection-summary').innerHTML =
+            selectedMemeClipId ? `<strong>1</strong> clip selected` : '';
+        };
+        grid.appendChild(card);
+      });
+    } catch (e) {
+      grid.innerHTML = `<p style="font-size:12px;color:var(--red-text);grid-column:1/-1">Error: ${e.message}</p>`;
+    }
+  }
+
+  async function generateMeme() {
+    const btn = document.getElementById('btn-meme-generate');
+    const label = document.getElementById('btn-meme-label');
+    btn.disabled = true;
+    label.textContent = 'Generating...';
+    document.getElementById('meme-progress-wrap').classList.add('visible');
+    hideResult();
+    hideAllErrors();
+    showProcessingCard(true);
+
+    const body = {
+      prompt: document.getElementById('meme-prompt').value.trim(),
+      target_duration_seconds: parseInt(document.getElementById('meme-duration').value),
+      music_file: document.getElementById('meme-music-file').value || null,
+      include_voiceover: document.getElementById('meme-include-vo').checked,
+    };
+
+    if (currentMemeMode === 'browse' && selectedMemeClipId) {
+      body.clip_id = selectedMemeClipId;
+    }
+
+    try {
+      const r = await fetch(`${API}/meme/generate`, {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify(body),
+      });
+      if (!r.ok) throw new Error((await r.json()).detail || 'Request failed');
+      const { job_id } = await r.json();
+      currentJobId = job_id;
+      jobStartMs = Date.now();
+      startElapsedTimer();
+      pollJob(job_id);
+    } catch (e) {
+      showModuleError('meme', e.message);
+      btn.disabled = false;
+      label.textContent = '😂 Generate Meme Clip';
+      document.getElementById('meme-progress-wrap').classList.remove('visible');
+      showProcessingCard(false);
+    }
+  }
+
+  // ── Audio tab helpers ───────────────────────────────────────────────────────
+  function switchAudioSource(src) {
+    currentAudioSource = src;
+    ['upload', 'library'].forEach(s => {
+      document.getElementById(`apill-${s}`).classList.toggle('active', s === src);
+      document.getElementById(`apanel-${s}`).classList.toggle('active', s === src);
+    });
+  }
+
+  function switchAudioClipMode(mode) {
+    currentAudioClipMode = mode;
+    ['describe', 'folder', 'random'].forEach(m => {
+      document.getElementById(`acpill-${m}`).classList.toggle('active', m === mode);
+      document.getElementById(`acpanel-${m}`).classList.toggle('active', m === mode);
+    });
+  }
+
+  async function handleAudioUpload(input) {
+    if (!input.files || !input.files[0]) return;
+    const file = input.files[0];
+    const nameEl = document.getElementById('audio-upload-name');
+    nameEl.textContent = `Uploading ${file.name}…`;
+    nameEl.classList.remove('has-file');
+
+    const form = new FormData();
+    form.append('file', file);
+    try {
+      const r = await fetch(`${API}/api/audio/upload`, { method: 'POST', body: form });
+      if (!r.ok) throw new Error((await r.json()).detail || 'Upload failed');
+      const data = await r.json();
+      uploadedAudioPath = data.path;
+      nameEl.textContent = data.filename || file.name;
+      nameEl.classList.add('has-file');
+      toast('Audio uploaded ✓');
+    } catch (e) {
+      nameEl.textContent = 'Upload failed: ' + e.message;
+      uploadedAudioPath = null;
+    }
+  }
+
+  async function generateAudioClip() {
+    const btn = document.getElementById('btn-audio-generate');
+    const label = document.getElementById('btn-audio-label');
+
+    // Resolve audio source
+    let audioPath = null;
+    let audioFile = null;
+    if (currentAudioSource === 'upload') {
+      if (!uploadedAudioPath) {
+        showModuleError('audio', 'Upload a trending audio file first.');
+        return;
+      }
+      audioPath = uploadedAudioPath;
+    } else {
+      audioFile = document.getElementById('audio-library-select').value;
+      if (!audioFile) {
+        showModuleError('audio', 'Select a track from the music library first.');
+        return;
+      }
+    }
+
+    btn.disabled = true;
+    label.textContent = 'Generating...';
+    document.getElementById('audio-progress-wrap').classList.add('visible');
+    hideResult();
+    hideAllErrors();
+    showProcessingCard(true);
+
+    const body = {
+      prompt: document.getElementById('audio-prompt').value.trim(),
+      audio_path: audioPath,
+      audio_file: audioFile,
+      mode: currentAudioClipMode,
+      include_voiceover: document.getElementById('audio-include-vo').checked,
+    };
+
+    if (currentAudioClipMode === 'folder') {
+      body.koofr_folder = document.getElementById('audio-folder-path').value || '/';
+    }
+
+    try {
+      const r = await fetch(`${API}/audio/generate`, {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify(body),
+      });
+      if (!r.ok) throw new Error((await r.json()).detail || 'Request failed');
+      const { job_id } = await r.json();
+      currentJobId = job_id;
+      jobStartMs = Date.now();
+      startElapsedTimer();
+      pollJob(job_id);
+    } catch (e) {
+      showModuleError('audio', e.message);
+      btn.disabled = false;
+      label.textContent = '🎵 Generate Audio Clip';
+      document.getElementById('audio-progress-wrap').classList.remove('visible');
+      showProcessingCard(false);
+    }
+  }
+
+  // ── Stock tab ───────────────────────────────────────────────────────────────
+  function toggleStockSkipStoryboard(on) {
+    const label = document.getElementById('stock-prompt-label');
+    const sub = document.getElementById('stock-prompt-sub');
+    const textarea = document.getElementById('stock-prompt');
+    const durationRow = document.getElementById('stock-duration').closest('.setting-item');
+    const brandRow = document.getElementById('stock-use-brand').closest('.toggle-row');
+
+    if (on) {
+      label.textContent = 'Your scene script';
+      sub.textContent = 'Write each scene as: [MM:SS - MM:SS] Title[VISUAL] description [AUDIO] sound NARRATOR: spoken line — clip_hint drives the Pexels search per scene.';
+      textarea.placeholder = '[0:00 - 0:05] THE HOOK[VISUAL] Slow cinematic pan across... [AUDIO] Bass drop. NARRATOR: Most people never realise...\n[0:05 - 0:15] THE BUT[VISUAL] ...';
+      textarea.rows = 10;
+      if (durationRow) durationRow.style.display = 'none';
+      if (brandRow) brandRow.style.display = 'none';
+    } else {
+      label.textContent = 'What\'s your reel about?';
+      sub.textContent = 'Claude writes an ABT-structured storyboard and searches Pexels stock video for each scene — no Koofr clips needed.';
+      textarea.placeholder = 'e.g. the cost of not starting your business today...';
+      textarea.rows = 3;
+      if (durationRow) durationRow.style.display = '';
+      if (brandRow) brandRow.style.display = '';
+    }
+  }
+
+  async function generateStock() {
+    const btn = document.getElementById('btn-stock-generate');
+    const label = document.getElementById('btn-stock-label');
+    btn.disabled = true;
+    label.textContent = 'Generating...';
+    document.getElementById('stock-progress-wrap').classList.add('visible');
+    hideResult();
+    hideAllErrors();
+    showProcessingCard(true);
+
+    const stockPrompt = document.getElementById('stock-prompt').value.trim();
+
+    const body = {
+      target_duration_seconds: parseInt(document.getElementById('stock-duration').value),
+      music_file: document.getElementById('stock-music-file').value || null,
+      include_text: document.getElementById('stock-include-text').checked,
+      include_voiceover: document.getElementById('stock-include-vo').checked,
+      use_brand_guidelines: document.getElementById('stock-use-brand').checked,
+      prompt: stockPrompt || null,
+      text_hints: stockPrompt || null,
+      skip_storyboard: document.getElementById('stock-skip-storyboard').checked,
+    };
+
+    try {
+      const r = await fetch(`${API}/stock/generate`, {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify(body),
+      });
+      if (!r.ok) throw new Error((await r.json()).detail || 'Request failed');
+      const { job_id } = await r.json();
+      currentJobId = job_id;
+      jobStartMs = Date.now();
+      startElapsedTimer();
+      pollJob(job_id);
+    } catch (e) {
+      showModuleError('stock', e.message);
+      btn.disabled = false;
+      label.textContent = '🎞 Generate Stock Reel';
+      document.getElementById('stock-progress-wrap').classList.remove('visible');
+      showProcessingCard(false);
+    }
+  }
+
+  // ── AI Reels: reel type state ─────────────────────────────────────────────
+  let aiReelType = 'story';
+  let aiKeyframePaths = [];
+  let aiCharImagePath = null;
+
+  function switchAIReelType(type) {
+    aiReelType = type;
+    ['story', 'character'].forEach(t => {
+      document.getElementById('ai-rpill-' + t).classList.toggle('active', t === type);
+      document.getElementById('ai-panel-' + t).style.display = t === type ? '' : 'none';
+    });
+  }
+
+  function updateAIKeyframeSlots() {
+    const dur = parseInt(document.getElementById('ai-duration').value) || 30;
+    const count = Math.max(1, Math.ceil(dur / 5));
+    document.getElementById('ai-kf-count-label').textContent = `(${count} for ${dur}s)`;
+    const container = document.getElementById('ai-keyframe-slots');
+    while (container.children.length < count) {
+      const idx = container.children.length;
+      const slot = document.createElement('div');
+      slot.className = 'ai-kf-slot';
+      slot.dataset.idx = idx;
+      slot.innerHTML = `
+        <div style="border:2px dashed #444;border-radius:8px;width:80px;height:80px;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-direction:column;overflow:hidden"
+             onclick="document.getElementById('ai-kf-input-${idx}').click()">
+          <img id="ai-kf-preview-${idx}" style="display:none;width:80px;height:80px;object-fit:cover;border-radius:6px" />
+          <span id="ai-kf-label-${idx}" style="font-size:11px;color:#888;text-align:center;padding:4px">Scene ${idx + 1}</span>
+        </div>
+        <input type="file" id="ai-kf-input-${idx}" accept="image/*" style="display:none"
+               onchange="handleAIKeyframeUpload(this, ${idx})" />`;
+      container.appendChild(slot);
+    }
+    while (container.children.length > count) {
+      container.removeChild(container.lastChild);
+      aiKeyframePaths.splice(count);
+    }
+  }
+
+  async function handleAIKeyframeUpload(input, idx) {
+    const file = input.files[0];
+    if (!file) return;
+    try {
+      const fd = new FormData(); fd.append('file', file);
+      const r = await fetch(`${API}/api/ai/upload-image`, {method: 'POST', body: fd});
+      if (!r.ok) throw new Error('Upload failed');
+      const {path} = await r.json();
+      aiKeyframePaths[idx] = path;
+      const preview = document.getElementById(`ai-kf-preview-${idx}`);
+      preview.src = URL.createObjectURL(file);
+      preview.style.display = '';
+      document.getElementById(`ai-kf-label-${idx}`).style.display = 'none';
+    } catch(e) { showModuleError('ai', e.message); }
+  }
+
+  async function handleAICharUpload(input) {
+    const file = input.files[0];
+    if (!file) return;
+    try {
+      const fd = new FormData(); fd.append('file', file);
+      const r = await fetch(`${API}/api/ai/upload-image`, {method: 'POST', body: fd});
+      if (!r.ok) throw new Error('Upload failed');
+      const {path} = await r.json();
+      aiCharImagePath = path;
+      const preview = document.getElementById('ai-char-preview');
+      preview.src = URL.createObjectURL(file);
+      preview.style.display = '';
+      document.getElementById('ai-char-drop-label').style.display = 'none';
+    } catch(e) { showModuleError('ai', e.message); }
+  }
+
+  function toggleAISkipStoryboard(on) {
+    const label = document.getElementById('ai-prompt-label');
+    const sub = document.getElementById('ai-prompt-sub');
+    const textarea = document.getElementById('ai-prompt');
+    const durationRow = document.getElementById('ai-duration').closest('.setting-item');
+    const brandRow = document.getElementById('ai-use-brand').closest('.toggle-row');
+
+    if (on) {
+      label.textContent = 'Your scene script';
+      sub.textContent = 'Write each scene as: [MM:SS - MM:SS] Title[VISUAL] description [AUDIO] sound NARRATOR: spoken line';
+      textarea.placeholder = '[0:00 - 0:05] THE HOOK[VISUAL] Slow cinematic pan across... [AUDIO] Bass drop. NARRATOR: Most people never realise...\n[0:05 - 0:15] THE BUT[VISUAL] ...';
+      textarea.rows = 10;
+      if (durationRow) durationRow.style.display = 'none';
+      if (brandRow) brandRow.style.display = 'none';
+    } else {
+      label.textContent = 'What\'s your reel about?';
+      sub.textContent = 'Claude writes an ABT-structured storyboard and generates every clip from scratch with Google Veo3 — no stock footage needed.';
+      textarea.placeholder = 'e.g. why most people quit before they ever really start...';
+      textarea.rows = 3;
+      if (durationRow) durationRow.style.display = '';
+      if (brandRow) brandRow.style.display = '';
+    }
+  }
+
+  async function generateAI() {
+    const btn = document.getElementById('btn-ai-generate');
+    const label = document.getElementById('btn-ai-label');
+    btn.disabled = true;
+    label.textContent = 'Generating...';
+    document.getElementById('ai-progress-wrap').classList.add('visible');
+    hideResult();
+    hideAllErrors();
+    showProcessingCard(true);
+
+    aiKeyframePaths = aiKeyframePaths.filter(Boolean);
+    const aiPrompt = document.getElementById('ai-prompt').value.trim();
+
+    const body = {
+      target_duration_seconds: parseInt(document.getElementById('ai-duration').value),
+      music_file: document.getElementById('ai-music-file').value || null,
+      include_text: document.getElementById('ai-include-text').checked,
+      include_voiceover: document.getElementById('ai-include-vo').checked,
+      use_brand_guidelines: document.getElementById('ai-use-brand').checked,
+      prompt: aiPrompt || null,
+      text_hints: aiPrompt || null,
+      reel_type: aiReelType,
+      character_image_path: aiReelType === 'character' ? aiCharImagePath : null,
+      keyframe_paths: aiReelType === 'story' && aiKeyframePaths.length ? aiKeyframePaths : null,
+      skip_storyboard: document.getElementById('ai-skip-storyboard').checked,
+    };
+
+    try {
+      const r = await fetch(`${API}/ai/generate`, {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify(body),
+      });
+      if (!r.ok) throw new Error((await r.json()).detail || 'Request failed');
+      const { job_id } = await r.json();
+      currentJobId = job_id;
+      currentTab = 'ai';
+      jobStartMs = Date.now();
+      startElapsedTimer();
+      pollJob(job_id);
+    } catch (e) {
+      showModuleError('ai', e.message);
+      btn.disabled = false;
+      label.textContent = '🤖 Generate AI Reel';
+      document.getElementById('ai-progress-wrap').classList.remove('visible');
+      showProcessingCard(false);
+    }
+  }
+
+  // Show error for the active module
+  function showModuleError(module, msg) {
+    const idMap = { reels: 'error-box', stock: 'stock-error-box', ai: 'ai-error-box', meme: 'meme-error-box', audio: 'audio-error-box', studio: 'studio-error-box' };
+    const id = idMap[module] || 'error-box';
+    const el = document.getElementById(id);
+    if (el) { el.textContent = '⚠ ' + msg; el.classList.add('visible'); }
+  }
+
+  // Reset whichever module button is active after job completes/fails
+  function resetActiveBtn() {
+    if (currentTab === 'reels') {
+      const btn = document.getElementById('btn-generate');
+      btn.disabled = false;
+      document.getElementById('btn-label').textContent = '✦ Generate Reel';
+    } else if (currentTab === 'stock') {
+      const btn = document.getElementById('btn-stock-generate');
+      btn.disabled = false;
+      document.getElementById('btn-stock-label').textContent = '🎞 Generate Stock Reel';
+      document.getElementById('stock-progress-wrap').classList.remove('visible');
+    } else if (currentTab === 'ai') {
+      const btn = document.getElementById('btn-ai-generate');
+      btn.disabled = false;
+      document.getElementById('btn-ai-label').textContent = '🤖 Generate AI Reel';
+      document.getElementById('ai-progress-wrap').classList.remove('visible');
+    } else if (currentTab === 'meme') {
+      const btn = document.getElementById('btn-meme-generate');
+      btn.disabled = false;
+      document.getElementById('btn-meme-label').textContent = '😂 Generate Meme Clip';
+      document.getElementById('meme-progress-wrap').classList.remove('visible');
+    } else if (currentTab === 'audio') {
+      const btn = document.getElementById('btn-audio-generate');
+      btn.disabled = false;
+      document.getElementById('btn-audio-label').textContent = '🎵 Generate Audio Clip';
+      document.getElementById('audio-progress-wrap').classList.remove('visible');
+    } else if (currentTab === 'studio') {
+      const btn = document.getElementById('btn-studio-generate');
+      btn.disabled = false;
+      document.getElementById('btn-studio-label').textContent = '✨ Generate Studio Reel';
+      document.getElementById('studio-progress-wrap').classList.remove('visible');
+    }
+  }
+
+  // ── Studio tab ──────────────────────────────────────────────────────────────
+  let studioProductPath = null;
+  let studioModelPath = null;
+  let studioLibraryModelId = null;
+  let studioModelSource = 'none';
+  let studioControls = {};
+
+  function selectChip(el, groupId, key) {
+    document.querySelectorAll('#' + groupId + ' .chip').forEach(c => c.classList.remove('active'));
+    el.classList.add('active');
+    studioControls[key] = el.textContent.trim();
+    updateStudioPromptPreviews();
+  }
+
+  function toggleAccordion(id) {
+    const body = document.getElementById(id);
+    const arrow = document.getElementById(id + '-arrow');
+    const isOpen = body.style.display !== 'none';
+    body.style.display = isOpen ? 'none' : 'block';
+    if (arrow) arrow.textContent = isOpen ? '▼' : '▲';
+  }
+
+  function switchStudioModelSource(src) {
+    studioModelSource = src;
+    ['none', 'library', 'upload'].forEach(s => {
+      document.getElementById('studio-mpill-' + s).classList.toggle('active', s === src);
+      document.getElementById('studio-mpanel-' + s).classList.toggle('active', s === src);
+    });
+    if (src !== 'library') studioLibraryModelId = null;
+    if (src !== 'upload') studioModelPath = null;
+    updateStudioPromptPreviews();
+  }
+
+  async function handleStudioImageUpload(input, type) {
+    const file = input.files[0];
+    if (!file) return;
+    const fd = new FormData();
+    fd.append('file', file);
+    try {
+      const r = await fetch(API + '/api/studio/upload-image', { method: 'POST', body: fd });
+      const data = await r.json();
+      if (data.path) {
+        if (type === 'product') {
+          studioProductPath = data.path;
+          document.getElementById('studio-product-label').textContent = file.name + ' — uploaded';
+          document.getElementById('studio-product-drop').classList.add('has-image');
+        } else {
+          studioModelPath = data.path;
+          document.getElementById('studio-model-label').textContent = file.name + ' — uploaded';
+        }
+      }
+    } catch (e) {
+      toast('Upload failed: ' + e.message);
+    }
+  }
+
+  function handleStudioDrop(event, type) {
+    event.preventDefault();
+    const file = event.dataTransfer.files[0];
+    if (!file) return;
+    const inputId = type === 'product' ? 'studio-product-input' : 'studio-model-input';
+    const input = document.getElementById(inputId);
+    const dt = new DataTransfer();
+    dt.items.add(file);
+    input.files = dt.files;
+    handleStudioImageUpload(input, type);
+  }
+
+  function renderStudioModelLibrary(models) {
+    const grid = document.getElementById('studio-model-grid');
+    grid.innerHTML = models.map(m => `
+      <div class="studio-model-card" id="model-card-${m.id}" onclick="selectLibraryModel('${m.id}')">
+        <div class="studio-model-name">${m.name}</div>
+        <div class="studio-model-region">${m.region}</div>
+      </div>
+    `).join('');
+  }
+
+  function selectLibraryModel(id) {
+    studioLibraryModelId = id;
+    document.querySelectorAll('.studio-model-card').forEach(c => c.classList.remove('selected'));
+    const card = document.getElementById('model-card-' + id);
+    if (card) card.classList.add('selected');
+    updateStudioPromptPreviews();
+  }
+
+  async function loadStudioModels() {
+    try {
+      const r = await fetch(API + '/api/studio/models');
+      const data = await r.json();
+      if (data.models) renderStudioModelLibrary(data.models);
+    } catch {}
+  }
+
+  function _ctrl(key, def) {
+    return studioControls[key] || def;
+  }
+
+  function buildShot1Prompt(name) {
+    const camera = _ctrl('s1_camera_angle', 'Eye-Level');
+    const lighting = _ctrl('s1_lighting', 'Clean E-commerce');
+    const material = _ctrl('s1_material', 'Matte');
+    const hyper = _ctrl('s1_hyper_realism', 'Off') === 'On';
+    return [
+      (name || 'product') + ' gently floating',
+      camera !== 'Eye-Level' ? camera + ' camera angle' : 'eye-level view',
+      lighting.toLowerCase() + ' lighting',
+      material !== 'Matte' ? material.toLowerCase() + ' finish' : '',
+      'slow rotation, studio background',
+      hyper ? 'photorealistic, 8K, RAW photo quality' : 'cinematic',
+    ].filter(Boolean).join(', ');
+  }
+
+  function buildShot2Prompt(name) {
+    const shotType = _ctrl('s2_shot_type', 'Full Body Front');
+    const expr = _ctrl('s2_expression', 'Neutral');
+    const interaction = _ctrl('s2_product_interaction', 'Holding');
+    return [
+      'model ' + shotType.toLowerCase(),
+      expr !== 'Neutral' ? expr.toLowerCase() + ' expression' : '',
+      interaction.toLowerCase() + ' the ' + (name || 'bag'),
+      'lifestyle setting, natural movement',
+    ].filter(Boolean).join(', ');
+  }
+
+  function buildShot3Prompt(name) {
+    const scene = _ctrl('s3_scene', 'City Street');
+    const lighting = _ctrl('s3_lighting', 'Golden Hour');
+    const tod = _ctrl('s3_time_of_day', 'None');
+    return [
+      (name || 'product') + ' in ' + scene.toLowerCase() + ' setting',
+      lighting.toLowerCase() + ' lighting',
+      tod !== 'None' ? tod.toLowerCase() : '',
+      'gentle ambient motion, natural scene movement',
+    ].filter(Boolean).join(', ');
+  }
+
+  function buildShot4Prompt(name) {
+    const surface = _ctrl('s4_surface', 'Marble Slab');
+    const camera = _ctrl('s4_camera_angle', 'Macro Detail');
+    const light = _ctrl('s4_light_quality', 'Soft');
+    const shadow = _ctrl('s4_shadow', 'Soft');
+    return [
+      'extreme close-up macro of ' + (name || 'product'),
+      surface.toLowerCase() + ' surface',
+      camera !== 'Macro Detail' ? camera.toLowerCase() + ' angle' : '',
+      light.toLowerCase() + ' light quality',
+      shadow !== 'None' ? shadow.toLowerCase() + ' shadow' : 'no shadow',
+      'slow push-in',
+    ].filter(Boolean).join(', ');
+  }
+
+  function buildShot5Prompt(name) {
+    const layout = _ctrl('s5_layout_style', 'Minimal White');
+    const camera = _ctrl('s5_camera_angle', 'Top-Down Flat Lay');
+    const grade = _ctrl('s5_color_grade', 'None');
+    const gradeMap = {
+      'Cinematic Teal & Orange': 'cinematic teal and orange color grade',
+      'Vintage Film': 'vintage film look, warm faded colors, subtle grain',
+      'Vibrant & Punchy': 'vibrant punchy colors, high saturation',
+      'Muted & Moody': 'muted moody tones, desaturated',
+      'Warm & Golden': 'warm golden tones, cozy feel',
+    };
+    return [
+      layout.toLowerCase() + ' flatlay of multiple ' + (name || 'products'),
+      camera !== 'Top-Down Flat Lay' ? 'slightly angled view' : 'top-down view',
+      gradeMap[grade] || '',
+      'slow panning reveal, gentle drift',
+    ].filter(Boolean).join(', ');
+  }
+
+  function updateStudioPromptPreviews() {
+    const name = (document.getElementById('studio-product-name') || {}).value || '';
+    const builders = [null, buildShot1Prompt, buildShot2Prompt, buildShot3Prompt, buildShot4Prompt, buildShot5Prompt];
+    for (let i = 1; i <= 5; i++) {
+      const override = document.getElementById('override-shot' + i);
+      if (override && override.checked) continue;
+      const el = document.getElementById('preview-shot' + i);
+      if (el) el.value = builders[i](name.trim() || 'product');
+    }
+  }
+
+  function toggleOverride(n) {
+    const checked = document.getElementById('override-shot' + n).checked;
+    document.getElementById('preview-shot' + n).style.display = checked ? 'none' : 'block';
+    document.getElementById('custom-shot' + n).style.display = checked ? 'block' : 'none';
+  }
+
+  function buildShotControls() {
+    // Emit nested structure matching backend _build_shotN_prompt() key expectations
+    const controls = {
+      shot1: {
+        camera_angle: _ctrl('s1_camera_angle', 'Eye-Level'),
+        lighting:     _ctrl('s1_lighting',      'Clean E-commerce'),
+        material:     _ctrl('s1_material',       'Matte'),
+        hyper_realism: _ctrl('s1_hyper_realism', 'Off') === 'On',
+      },
+      shot2: {
+        shot_type:           _ctrl('s2_shot_type',           'Full Body Front'),
+        expression:          _ctrl('s2_expression',          'Neutral'),
+        product_interaction: _ctrl('s2_product_interaction', 'Holding'),
+      },
+      shot3: {
+        scene:       _ctrl('s3_scene',       'City Street'),
+        lighting:    _ctrl('s3_lighting',    'Golden Hour'),
+        time_of_day: _ctrl('s3_time_of_day', 'None'),
+      },
+      shot4: {
+        surface:       _ctrl('s4_surface',       'Marble Slab'),
+        camera_angle:  _ctrl('s4_camera_angle',  'Macro Detail'),
+        light_quality: _ctrl('s4_light_quality', 'Soft'),
+        shadow:        _ctrl('s4_shadow',         'Soft'),
+      },
+      shot5: {
+        layout_style: _ctrl('s5_layout_style', 'Minimal White'),
+        camera_angle: _ctrl('s5_camera_angle', 'Top-Down Flat Lay'),
+        color_grade:  _ctrl('s5_color_grade',  'None'),
+      },
+    };
+    // Attach any custom prompt overrides so backend skips rebuilding for that shot
+    for (let i = 1; i <= 5; i++) {
+      const override = document.getElementById('override-shot' + i);
+      if (override && override.checked) {
+        controls['shot' + i + '_custom_prompt'] = document.getElementById('custom-shot' + i).value;
+      }
+    }
+    return controls;
+  }
+
+  async function generateStudio() {
+    if (!studioProductPath) {
+      toast('Please upload a product image first');
+      return;
+    }
+    const btn = document.getElementById('btn-studio-generate');
+    const label = document.getElementById('btn-studio-label');
+    btn.disabled = true;
+    label.textContent = 'Generating…';
+    document.getElementById('studio-error-box').classList.remove('visible');
+    document.getElementById('studio-progress-wrap').classList.add('visible');
+    hideResult();
+
+    const productName = document.getElementById('studio-product-name').value.trim();
+    const musicFile = document.getElementById('studio-music-file').value;
+    const negativePrompt = document.getElementById('studio-negative-prompt').value.trim();
+
+    const payload = {
+      product_image_path: studioProductPath,
+      model_image_path: studioModelSource === 'upload' ? studioModelPath : null,
+      library_model_id: studioModelSource === 'library' ? studioLibraryModelId : null,
+      product_name: productName || null,
+      music_file: musicFile || null,
+      negative_prompt: negativePrompt || null,
+      shot_controls: buildShotControls(),
+    };
+
+    try {
+      const r = await fetch(API + '/studio/generate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+      const data = await r.json();
+      if (!data.job_id) throw new Error(data.detail || 'Failed to start Studio job');
+      currentJobId = data.job_id;
+      jobStartMs = Date.now();
+      startElapsedTimer();
+      showProcessingCard(true);
+      pollJob(data.job_id);
+    } catch (e) {
+      showModuleError('studio', e.message);
+      btn.disabled = false;
+      label.textContent = '✨ Generate Studio Reel';
+      document.getElementById('studio-progress-wrap').classList.remove('visible');
+      showProcessingCard(false);
+    }
+  }
+
+  loadMusicTracks();
+  loadSettings();
+  loadStudioModels();
+  updateStudioPromptPreviews();
+  updateAIKeyframeSlots();
+</script>
+</body>
+</html>

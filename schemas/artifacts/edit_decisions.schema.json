@@ -1,0 +1,36 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "edit_decisions",
+  "type": "object",
+  "required": ["version", "cuts", "total_duration_seconds"],
+  "properties": {
+    "version": { "type": "string" },
+    "cuts": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["order", "clip_id", "trim_in", "trim_out", "transition"],
+        "properties": {
+          "order": { "type": "integer", "minimum": 0 },
+          "clip_id": { "type": "string" },
+          "trim_in": { "type": "number", "minimum": 0 },
+          "trim_out": { "type": "number", "minimum": 0 },
+          "transition": {
+            "type": "string",
+            "enum": ["hard_cut", "fade_to_black", "cross_dissolve"]
+          },
+          "transition_duration_seconds": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    "total_duration_seconds": { "type": "number", "minimum": 0 },
+    "music_start_offset_seconds": { "type": "number", "minimum": 0 }
+  },
+  "additionalProperties": false
+}

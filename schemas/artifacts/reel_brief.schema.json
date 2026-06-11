@@ -1,0 +1,28 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "reel_brief",
+  "type": "object",
+  "required": ["version", "mode", "target_duration_seconds"],
+  "properties": {
+    "version": { "type": "string" },
+    "mode": {
+      "type": "string",
+      "enum": ["random", "describe", "browse", "folder"]
+    },
+    "target_duration_seconds": {
+      "type": "number",
+      "minimum": 15,
+      "maximum": 90
+    },
+    "koofr_folder": { "type": ["string", "null"] },
+    "clip_ids": {
+      "type": ["array", "null"],
+      "items": { "type": "string" }
+    },
+    "prompt": { "type": ["string", "null"] },
+    "music_file": { "type": ["string", "null"] },
+    "include_text": { "type": "boolean" },
+    "text_hints": { "type": ["string", "null"] }
+  },
+  "additionalProperties": false
+}

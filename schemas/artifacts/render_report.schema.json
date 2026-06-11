@@ -1,0 +1,28 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "render_report",
+  "type": "object",
+  "required": ["version", "output_path", "duration_seconds", "resolution", "codec", "file_size_bytes"],
+  "properties": {
+    "version": { "type": "string" },
+    "output_path": { "type": "string" },
+    "duration_seconds": { "type": "number", "minimum": 0 },
+    "resolution": {
+      "type": "object",
+      "required": ["width", "height"],
+      "properties": {
+        "width": { "type": "integer" },
+        "height": { "type": "integer" }
+      }
+    },
+    "fps": { "type": "number" },
+    "codec": { "type": "string" },
+    "audio_codec": { "type": "string" },
+    "file_size_bytes": { "type": "integer", "minimum": 0 },
+    "warnings": {
+      "type": "array",
+      "items": { "type": "string" }
+    }
+  },
+  "additionalProperties": false
+}

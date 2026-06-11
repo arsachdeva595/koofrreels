@@ -1,0 +1,14 @@
+[Unit]
+Description=KoofrReels FastAPI server
+After=network.target
+
+[Service]
+User=koofrreels
+WorkingDirectory=/opt/koofrreels
+EnvironmentFile=/opt/koofrreels/.env
+ExecStart=/opt/koofrreels/.venv/bin/uvicorn backend.main:app --host 127.0.0.1 --port 8000
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

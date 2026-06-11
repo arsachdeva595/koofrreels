@@ -1,0 +1,28 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "text_plan",
+  "type": "object",
+  "required": ["version", "title"],
+  "properties": {
+    "version": { "type": "string" },
+    "title": { "type": "string", "maxLength": 60 },
+    "caption": { "type": ["string", "null"], "maxLength": 120 },
+    "title_position": {
+      "type": "string",
+      "enum": ["top", "center", "bottom"],
+      "default": "top"
+    },
+    "caption_position": {
+      "type": "string",
+      "enum": ["top", "center", "bottom"],
+      "default": "bottom"
+    },
+    "font": { "type": "string", "default": "Arial" },
+    "font_size": { "type": "integer", "minimum": 16, "maximum": 120 },
+    "color": { "type": "string", "pattern": "^#[0-9a-fA-F]{6}$" },
+    "stroke_color": { "type": ["string", "null"] },
+    "fade_in_seconds": { "type": "number", "minimum": 0 },
+    "display_duration_seconds": { "type": ["number", "null"] }
+  },
+  "additionalProperties": false
+}

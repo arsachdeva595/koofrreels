@@ -1,0 +1,1101 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>KoofrReels — Settings</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      background: #0d0d0d;
+      color: #f0f0f0;
+      min-height: 100vh;
+    }
+
+    header {
+      padding: 18px 32px;
+      border-bottom: 1px solid #222;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    header .left { display: flex; align-items: center; gap: 16px; }
+    header h1 { font-size: 20px; font-weight: 700; }
+    .nav-link {
+      font-size: 13px;
+      color: #888;
+      text-decoration: none;
+      padding: 6px 12px;
+      border-radius: 6px;
+      border: 1px solid #333;
+      transition: all 0.15s;
+    }
+    .nav-link:hover { color: #fff; border-color: #555; }
+
+    .layout {
+      display: grid;
+      grid-template-columns: 200px 1fr;
+      height: calc(100vh - 61px);
+    }
+
+    /* Sidebar tabs */
+    .sidebar {
+      border-right: 1px solid #222;
+      padding: 20px 12px;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+
+    .stab {
+      padding: 9px 14px;
+      border-radius: 7px;
+      border: none;
+      background: transparent;
+      color: #888;
+      cursor: pointer;
+      font-size: 13px;
+      text-align: left;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      transition: all 0.15s;
+    }
+    .stab:hover { background: #1a1a1a; color: #ccc; }
+    .stab.active { background: #1e1428; color: #a78bfa; font-weight: 600; }
+    .stab .icon { font-size: 15px; }
+
+    /* Content area */
+    .content {
+      overflow-y: auto;
+      padding: 32px 40px;
+      max-width: 720px;
+    }
+
+    .tab-panel { display: none; }
+    .tab-panel.active { display: block; }
+
+    h2 { font-size: 18px; font-weight: 700; margin-bottom: 6px; }
+    .section-desc { font-size: 13px; color: #777; margin-bottom: 24px; line-height: 1.6; }
+
+    .field { margin-bottom: 18px; }
+    .field label { display: block; font-size: 12px; color: #888; margin-bottom: 6px; font-weight: 500; }
+    .field input,
+    .field select,
+    .field textarea {
+      width: 100%;
+      background: #1a1a1a;
+      border: 1px solid #333;
+      border-radius: 7px;
+      color: #f0f0f0;
+      font-size: 13px;
+      padding: 9px 12px;
+      outline: none;
+      transition: border-color 0.15s;
+    }
+    .field input:focus, .field select:focus, .field textarea:focus { border-color: #7c3aed; }
+    .field textarea { resize: vertical; min-height: 120px; font-family: 'Menlo', 'Courier New', monospace; font-size: 12px; }
+    .field .hint { font-size: 11px; color: #555; margin-top: 5px; line-height: 1.5; }
+
+    .field-row { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+
+    .toggle-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 12px 14px;
+      background: #1a1a1a;
+      border: 1px solid #2a2a2a;
+      border-radius: 8px;
+      margin-bottom: 12px;
+    }
+    .toggle-row .label { font-size: 13px; color: #ccc; }
+    .toggle-row .sublabel { font-size: 11px; color: #555; margin-top: 2px; }
+
+    /* Toggle switch */
+    .switch { position: relative; display: inline-block; width: 40px; height: 22px; }
+    .switch input { opacity: 0; width: 0; height: 0; }
+    .slider {
+      position: absolute; cursor: pointer; inset: 0;
+      background: #333; border-radius: 22px; transition: .2s;
+    }
+    .slider:before {
+      position: absolute; content: "";
+      height: 16px; width: 16px; left: 3px; bottom: 3px;
+      background: white; border-radius: 50%; transition: .2s;
+    }
+    .switch input:checked + .slider { background: #7c3aed; }
+    .switch input:checked + .slider:before { transform: translateX(18px); }
+
+    /* Save button */
+    .btn-save {
+      padding: 10px 24px;
+      background: #7c3aed;
+      color: #fff;
+      border: none;
+      border-radius: 7px;
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background 0.15s;
+      margin-top: 8px;
+    }
+    .btn-save:hover { background: #6d28d9; }
+    .btn-save:disabled { background: #3b2a66; color: #888; cursor: not-allowed; }
+
+    .btn-secondary {
+      padding: 8px 16px;
+      background: #1a1a1a;
+      color: #ccc;
+      border: 1px solid #333;
+      border-radius: 7px;
+      font-size: 13px;
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+    .btn-secondary:hover { border-color: #555; color: #fff; }
+
+    .toast {
+      position: fixed;
+      bottom: 24px;
+      right: 24px;
+      padding: 12px 20px;
+      background: #16a34a;
+      color: #fff;
+      border-radius: 8px;
+      font-size: 13px;
+      font-weight: 500;
+      transform: translateY(80px);
+      opacity: 0;
+      transition: all 0.3s;
+      z-index: 100;
+    }
+    .toast.visible { transform: translateY(0); opacity: 1; }
+    .toast.error { background: #dc2626; }
+
+    .divider { border: none; border-top: 1px solid #222; margin: 24px 0; }
+
+    /* Koofr folder browser */
+    .folder-browser {
+      background: #1a1a1a;
+      border: 1px solid #2a2a2a;
+      border-radius: 8px;
+      padding: 12px;
+      max-height: 200px;
+      overflow-y: auto;
+      margin-top: 8px;
+    }
+    .folder-item {
+      padding: 7px 10px;
+      border-radius: 5px;
+      cursor: pointer;
+      font-size: 12px;
+      color: #ccc;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      transition: background 0.1s;
+    }
+    .folder-item:hover { background: #252525; }
+    .folder-item.selected { background: #1e1428; color: #a78bfa; }
+
+    /* Publer accounts grid */
+    .account-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+      margin-top: 8px;
+      max-height: 260px;
+      overflow-y: auto;
+      padding-right: 4px;
+    }
+    .account-grid::-webkit-scrollbar { width: 4px; }
+    .account-grid::-webkit-scrollbar-track { background: transparent; }
+    .account-grid::-webkit-scrollbar-thumb { background: #333; border-radius: 4px; }
+
+    .account-card {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 10px 12px;
+      background: #1a1a1a;
+      border: 1px solid #2a2a2a;
+      border-radius: 8px;
+      cursor: pointer;
+      transition: border-color 0.15s, background 0.15s;
+      min-width: 0;
+    }
+    .account-card:hover { background: #222; border-color: #3a3a3a; }
+    .account-card.selected { border-color: #7c3aed; background: #1e1428; }
+    .account-card input[type="checkbox"] { display: none; }
+    .account-card .acc-check {
+      width: 16px; height: 16px; min-width: 16px;
+      border: 1.5px solid #444; border-radius: 4px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 10px; color: #fff;
+      background: transparent; transition: all 0.15s;
+    }
+    .account-card.selected .acc-check { background: #7c3aed; border-color: #7c3aed; }
+    .account-card .platform-badge {
+      font-size: 9px;
+      padding: 2px 5px;
+      border-radius: 3px;
+      background: #2a2a2a;
+      color: #777;
+      text-transform: uppercase;
+      font-weight: 700;
+      white-space: nowrap;
+    }
+    .account-card .acc-info { min-width: 0; flex: 1; }
+    .account-card .name { font-size: 12px; color: #ccc; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .account-card .username { font-size: 11px; color: #555; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+    /* Queue list */
+    .queue-list { display: flex; flex-direction: column; gap: 10px; margin-top: 12px; }
+    .queue-card {
+      background: #1a1a1a;
+      border: 1px solid #2a2a2a;
+      border-radius: 9px;
+      padding: 14px 16px;
+    }
+    .queue-card .qc-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 6px;
+    }
+    .queue-card .qc-title { font-size: 13px; font-weight: 600; color: #e0e0e0; }
+    .queue-card .qc-meta { font-size: 11px; color: #555; }
+    .queue-card .qc-status {
+      font-size: 10px;
+      padding: 2px 8px;
+      border-radius: 100px;
+      font-weight: 600;
+    }
+    .status-pending { background: #1c2a1c; color: #4ade80; border: 1px solid #166534; }
+    .status-running { background: #1e1428; color: #a78bfa; border: 1px solid #4c1d95; }
+    .status-completed { background: #111; color: #555; border: 1px solid #2a2a2a; }
+    .status-failed { background: #2a0a0a; color: #f87171; border: 1px solid #7f1d1d; }
+    .queue-card .qc-actions { display: flex; gap: 8px; margin-top: 10px; }
+
+    .btn-run {
+      padding: 6px 14px;
+      background: #7c3aed;
+      color: #fff;
+      border: none;
+      border-radius: 6px;
+      font-size: 12px;
+      cursor: pointer;
+    }
+    .btn-del {
+      padding: 6px 12px;
+      background: transparent;
+      color: #888;
+      border: 1px solid #333;
+      border-radius: 6px;
+      font-size: 12px;
+      cursor: pointer;
+    }
+    .btn-del:hover { color: #f87171; border-color: #7f1d1d; }
+
+    .add-idea-form {
+      background: #1a1a1a;
+      border: 1px solid #2a2a2a;
+      border-radius: 9px;
+      padding: 16px;
+      margin-bottom: 16px;
+    }
+    .add-idea-form h3 { font-size: 13px; font-weight: 600; color: #ccc; margin-bottom: 12px; }
+
+    /* Brand voice info box */
+    .info-box {
+      background: #0f1e0f;
+      border: 1px solid #1a3a1a;
+      border-radius: 7px;
+      padding: 12px 14px;
+      font-size: 12px;
+      color: #86efac;
+      line-height: 1.6;
+      margin-bottom: 16px;
+    }
+
+    .step-guide {
+      background: #1a1a1a;
+      border: 1px solid #2a2a2a;
+      border-radius: 9px;
+      padding: 16px 20px;
+      margin-bottom: 20px;
+    }
+    .step-guide h3 { font-size: 13px; font-weight: 600; color: #ccc; margin-bottom: 10px; }
+    .step-guide ol { padding-left: 20px; }
+    .step-guide li { font-size: 13px; color: #888; margin-bottom: 6px; line-height: 1.5; }
+    .step-guide li strong { color: #ccc; }
+    .step-guide a { color: #a78bfa; }
+    .step-guide code {
+      background: #2a2a2a;
+      padding: 1px 5px;
+      border-radius: 3px;
+      font-size: 11px;
+      font-family: monospace;
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="left">
+      <h1>⚙ Settings</h1>
+    </div>
+    <a href="/" class="nav-link">← Back to Studio</a>
+  </header>
+
+  <div class="layout">
+    <!-- Sidebar -->
+    <div class="sidebar">
+      <button class="stab active" onclick="showTab('api-keys')"><span class="icon">🔑</span> API Keys</button>
+      <button class="stab" onclick="showTab('koofr')"><span class="icon">☁</span> Koofr</button>
+      <button class="stab" onclick="showTab('output')"><span class="icon">📁</span> Output</button>
+      <button class="stab" onclick="showTab('brand-voice')"><span class="icon">🎨</span> Brand Voice</button>
+      <button class="stab" onclick="showTab('publer')"><span class="icon">📤</span> Publer</button>
+      <button class="stab" onclick="showTab('queue')"><span class="icon">📋</span> Queue</button>
+    </div>
+
+    <!-- Content -->
+    <div class="content">
+
+      <!-- ── API Keys ──────────────────────────────────────────────────────── -->
+      <div class="tab-panel active" id="tab-api-keys">
+        <h2>API Keys</h2>
+        <p class="section-desc">Connect your accounts. Keys are stored locally in <code>settings.json</code> and never sent anywhere except the respective APIs.</p>
+
+        <div class="step-guide">
+          <h3>How to get your Koofr application password (non-developer)</h3>
+          <ol>
+            <li>Go to <a href="https://app.koofr.net/app/admin/preferences/password" target="_blank">koofr.net → Preferences → App Passwords</a></li>
+            <li>Click <strong>"Add application password"</strong></li>
+            <li>Name it <strong>KoofrReels</strong> and click Create</li>
+            <li>Copy the generated password — it only shows once</li>
+            <li>Paste your Koofr email and that password below</li>
+          </ol>
+        </div>
+
+        <div class="field-row">
+          <div class="field">
+            <label>Koofr Email</label>
+            <input type="email" id="koofr_email" placeholder="your@email.com" />
+          </div>
+          <div class="field">
+            <label>Koofr App Password</label>
+            <input type="password" id="koofr_app_password" placeholder="Generated app password" />
+          </div>
+        </div>
+
+        <hr class="divider" />
+
+        <div class="field">
+          <label>Anthropic API Key <span style="color:#555">(for clip scoring + text generation)</span></label>
+          <input type="password" id="anthropic_api_key" placeholder="sk-ant-..." />
+          <div class="hint">Get one at <a href="https://console.anthropic.com" target="_blank" style="color:#a78bfa">console.anthropic.com</a></div>
+        </div>
+
+        <hr class="divider" />
+
+        <div class="field-row">
+          <div class="field">
+            <label>Publer API Key</label>
+            <input type="password" id="publer_api_key" placeholder="Publer → Settings → API Keys" />
+            <div class="hint">Requires Business or Enterprise plan</div>
+          </div>
+          <div class="field">
+            <label>Publer Workspace ID</label>
+            <input type="text" id="publer_workspace_id" placeholder="Your workspace ID" />
+          </div>
+        </div>
+
+        <hr class="divider" />
+
+        <div class="field">
+          <label>Pexels API Key <span style="color:#555">(for gap-fill when Koofr clips are missing)</span></label>
+          <input type="password" id="pexels_api_key" placeholder="Pexels API key" />
+          <div class="hint">Free at <a href="https://www.pexels.com/api/" target="_blank" style="color:#a78bfa">pexels.com/api</a></div>
+        </div>
+
+        <hr class="divider" />
+
+        <div class="field">
+          <label>ElevenLabs API Key <span style="color:#555">(for AI voiceover on each scene)</span></label>
+          <input type="password" id="elevenlabs_api_key" placeholder="ElevenLabs API key" />
+          <div class="hint">Get one at <a href="https://elevenlabs.io" target="_blank" style="color:#a78bfa">elevenlabs.io</a> — free tier includes 10k characters/month</div>
+        </div>
+
+        <div class="field">
+          <label>ElevenLabs Voice ID <span style="color:#555">(optional — leave blank for default Rachel voice)</span></label>
+          <input type="text" id="elevenlabs_voice_id" placeholder="e.g. 21m00Tcm4TlvDq8ikWAM" />
+          <div class="hint">Find voice IDs in your ElevenLabs dashboard under Voices</div>
+        </div>
+
+        <hr style="border:none;border-top:1px solid #222;margin:8px 0" />
+
+        <div class="field">
+          <label>fal.ai API Key <span style="color:#555">(for Studio — AI video generation)</span></label>
+          <input type="password" id="fal_api_key" placeholder="fal.ai API key" />
+          <div class="hint">Get one at <a href="https://fal.ai" target="_blank" style="color:#a78bfa">fal.ai</a> — required for the Studio module</div>
+        </div>
+
+        <div class="field">
+          <label>WaveSpeed API Key <span style="color:#555">(optional — used for Shot 4 macro; falls back to fal.ai)</span></label>
+          <input type="password" id="wavespeed_api_key" placeholder="WaveSpeed API key" />
+          <div class="hint">Get one at <a href="https://wavespeed.ai" target="_blank" style="color:#a78bfa">wavespeed.ai</a> — optional</div>
+        </div>
+
+        <hr style="border:none;border-top:1px solid #222;margin:16px 0" />
+
+        <div class="field-row" style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+          <div class="field">
+            <label>Google Cloud Project ID <span style="color:#555">(for AI Reels — Veo3)</span></label>
+            <input type="text" id="vertex_project_id" placeholder="my-gcp-project-123" />
+          </div>
+          <div class="field">
+            <label>Vertex AI Location</label>
+            <input type="text" id="vertex_location" placeholder="us-central1" />
+          </div>
+        </div>
+
+        <div class="field">
+          <label>Google Credentials Path <span style="color:#555">(optional — leave blank to use gcloud ADC)</span></label>
+          <input type="text" id="google_credentials_path" placeholder="/Users/you/keys/service-account.json" />
+          <div class="hint">Path to a service account JSON key file. Or skip this and run: <code>gcloud auth application-default login</code></div>
+        </div>
+
+        <button class="btn-save" onclick="saveApiKeys()">Save API Keys</button>
+      </div>
+
+      <!-- ── Koofr ─────────────────────────────────────────────────────────── -->
+      <div class="tab-panel" id="tab-koofr">
+        <h2>Koofr Storage</h2>
+        <p class="section-desc">Set your default Koofr folder. The dashboard will use this folder when you pick "Folder" mode or don't specify a path.</p>
+
+        <div class="field">
+          <label>Default Folder Path</label>
+          <input type="text" id="koofr_default_folder" placeholder="/" value="/" />
+          <div class="hint">e.g. /Reels, /Summer/Beach — must match your Koofr folder structure</div>
+        </div>
+
+        <button class="btn-secondary" onclick="loadKoofrFolders()" style="margin-bottom:12px">Browse Folders</button>
+
+        <div class="folder-browser" id="folder-browser" style="display:none">
+          <div id="folder-list"><span style="color:#555;font-size:12px">Loading...</span></div>
+        </div>
+
+        <div class="toggle-row" style="margin-top:16px">
+          <div>
+            <div class="label">Enable Pexels Gap-Fill</div>
+            <div class="sublabel">If Koofr has no clips for a query, search Pexels automatically</div>
+          </div>
+          <label class="switch">
+            <input type="checkbox" id="pexels_gap_fill_enabled" />
+            <span class="slider"></span>
+          </label>
+        </div>
+
+        <button class="btn-save" onclick="saveKoofrSettings()">Save Koofr Settings</button>
+      </div>
+
+      <!-- ── Output ──────────────────────────────────────────────────────────── -->
+      <div class="tab-panel" id="tab-output">
+        <h2>Local Output Folder</h2>
+        <p class="section-desc">Choose a folder on this machine where finished videos are automatically copied after each render. The original stays inside the project folder — this is a convenience copy in one place.</p>
+
+        <div style="display:flex;align-items:center;gap:12px;margin-bottom:12px">
+          <button class="btn-secondary" onclick="pickOutputFolder()">Choose Folder…</button>
+          <button class="btn-secondary" onclick="clearOutputFolder()" id="btn-clear-output" style="display:none;color:#f87171;border-color:#7f1d1d">✕ Clear</button>
+        </div>
+
+        <div id="output-dir-status" style="margin-bottom:20px;font-size:13px;color:#555;padding:10px 14px;background:#1a1a1a;border:1px solid #2a2a2a;border-radius:7px">
+          No folder selected — files stay in the project directory only.
+        </div>
+
+        <!-- Hidden field carries the actual path -->
+        <input type="hidden" id="local_output_dir" />
+
+        <button class="btn-save" onclick="saveOutputSettings()">Save Output Settings</button>
+      </div>
+
+      <!-- ── Brand Voice ───────────────────────────────────────────────────── -->
+      <div class="tab-panel" id="tab-brand-voice">
+        <h2>Brand Voice</h2>
+        <p class="section-desc">Write your brand guidelines in Markdown. The AI reads this before generating text overlays and scoring clips — so it knows your tone, style, and what to avoid.</p>
+
+        <div class="info-box">
+          This document is injected as context into every reel creation. Include: brand tone, target audience, topics to cover or avoid, hashtag style, caption examples, and any visual direction.
+        </div>
+
+        <div class="field">
+          <label>Brand Guidelines (Markdown)</label>
+          <textarea id="brand_voice" rows="20" placeholder="# Brand Voice
+
+## Tone
+- Warm, aspirational, not corporate
+- Use active voice
+- Keep captions short and punchy
+
+## Audience
+Young professionals, 25-35, interested in wellness and travel
+
+## Topics to Cover
+- Behind the scenes moments
+- Product in use (natural settings)
+- Travel and lifestyle
+
+## Avoid
+- Stock-photo feel
+- Text-heavy overlays
+- Corporate language
+
+## Caption Style
+Short. 1-2 lines max. Example:
+'Golden hour never misses. ✨'
+"></textarea>
+        </div>
+
+        <button class="btn-save" onclick="saveBrandVoice()">Save Brand Voice</button>
+      </div>
+
+      <!-- ── Publer ─────────────────────────────────────────────────────────── -->
+      <div class="tab-panel" id="tab-publer">
+        <h2>Publer Integration</h2>
+        <p class="section-desc">Connect Publer to push approved reels directly to your social media scheduler queue.</p>
+
+        <div class="step-guide">
+          <h3>How to get your Publer API key</h3>
+          <ol>
+            <li>Log in to <a href="https://app.publer.io" target="_blank">app.publer.io</a></li>
+            <li>Go to <strong>Settings → Access & Login → API Keys</strong></li>
+            <li>Click <strong>Generate New Key</strong></li>
+            <li>Copy the key and paste it in the API Keys tab above</li>
+            <li>Find your Workspace ID in the URL: <code>app.publer.io/workspaces/<strong>YOUR_ID</strong></code></li>
+          </ol>
+        </div>
+
+        <div class="toggle-row">
+          <div>
+            <div class="label">Enable Publer Integration</div>
+            <div class="sublabel">Show "Push to Publer" button after reel is generated</div>
+          </div>
+          <label class="switch">
+            <input type="checkbox" id="publer_enabled" />
+            <span class="slider"></span>
+          </label>
+        </div>
+
+        <div class="toggle-row">
+          <div>
+            <div class="label">Auto-Schedule Posts</div>
+            <div class="sublabel">Automatically schedule at the time set below</div>
+          </div>
+          <label class="switch">
+            <input type="checkbox" id="publer_auto_schedule" />
+            <span class="slider"></span>
+          </label>
+        </div>
+
+        <div class="field">
+          <label>Default Schedule Time</label>
+          <input type="time" id="publer_schedule_time" value="09:00" />
+        </div>
+
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
+          <span style="font-size:13px;color:#888">Default accounts for posting</span>
+          <button class="btn-secondary" id="btn-fetch-publer" onclick="fetchPublerAccountsBtn()" style="font-size:12px;padding:6px 12px">Fetch Accounts</button>
+        </div>
+
+        <div id="publer-accounts-container">
+          <p style="font-size:12px;color:#555">Click "Fetch Accounts" to load your connected social profiles.</p>
+        </div>
+
+        <button class="btn-save" onclick="savePublerSettings()" style="margin-top:16px">Save Publer Settings</button>
+      </div>
+
+      <!-- ── Queue ──────────────────────────────────────────────────────────── -->
+      <div class="tab-panel" id="tab-queue">
+        <h2>Reel Queue</h2>
+        <p class="section-desc">Add reel ideas to the queue. Run them on demand or enable auto-run to generate reels automatically.</p>
+
+        <div class="toggle-row">
+          <div>
+            <div class="label">Auto-Run Queue</div>
+            <div class="sublabel">Automatically generate pending reels on a schedule</div>
+          </div>
+          <label class="switch">
+            <input type="checkbox" id="queue_auto_run" onchange="saveQueueSettings()" />
+            <span class="slider"></span>
+          </label>
+        </div>
+
+        <div class="field" style="margin-top:12px">
+          <label>Run interval (hours)</label>
+          <input type="number" id="queue_run_interval_hours" value="24" min="1" max="168" style="width:100px" />
+        </div>
+
+        <button class="btn-save" onclick="saveQueueSettings()" style="margin-bottom:24px">Save Queue Settings</button>
+
+        <hr class="divider" />
+
+        <!-- Add idea form -->
+        <div class="add-idea-form">
+          <h3>Add Reel Idea</h3>
+          <div class="field-row">
+            <div class="field">
+              <label>Mode</label>
+              <select id="q-mode">
+                <option value="random">Random</option>
+                <option value="describe">Describe</option>
+                <option value="folder">Folder</option>
+              </select>
+            </div>
+            <div class="field">
+              <label>Duration (seconds)</label>
+              <input type="number" id="q-duration" value="30" min="15" max="90" />
+            </div>
+          </div>
+          <div class="field">
+            <label>Prompt / Text Hint</label>
+            <input type="text" id="q-prompt" placeholder="e.g. beach sunset, golden hour, slow motion" />
+          </div>
+          <div class="field">
+            <label>Koofr Folder (optional)</label>
+            <input type="text" id="q-folder" placeholder="/Summer/Beach" />
+          </div>
+          <div class="field">
+            <label>Notes (internal)</label>
+            <input type="text" id="q-notes" placeholder="For the Monday post, beach collection" />
+          </div>
+
+          <div class="toggle-row" style="margin-top:8px">
+            <div>
+              <div class="label">Push to Publer when done</div>
+              <div class="sublabel">Auto-upload and schedule after generation</div>
+            </div>
+            <label class="switch">
+              <input type="checkbox" id="q-publer-push" onchange="toggleQueuePubler()" />
+              <span class="slider"></span>
+            </label>
+          </div>
+
+          <div id="q-publer-config" style="display:none;margin-top:12px">
+            <div class="field">
+              <label>Caption for Publer</label>
+              <input type="text" id="q-caption" placeholder="Caption to post with the reel" />
+            </div>
+            <div class="field">
+              <label>Account IDs (comma-separated)</label>
+              <input type="text" id="q-account-ids" placeholder="123,456" />
+              <div class="hint">Get IDs from the Publer tab above</div>
+            </div>
+          </div>
+
+          <button class="btn-save" onclick="addQueueIdea()" style="margin-top:12px">Add to Queue</button>
+        </div>
+
+        <!-- Queue list -->
+        <div id="queue-list-container">
+          <p style="font-size:12px;color:#555">Loading queue...</p>
+        </div>
+      </div>
+
+    </div><!-- /content -->
+  </div><!-- /layout -->
+
+  <div class="toast" id="toast"></div>
+
+  <script>
+    const API = '';
+    let publerAccounts = [];
+    let settings = {};
+
+    // ── Tab switching ───────────────────────────────────────────────────────────
+    function showTab(id) {
+      document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+      document.querySelectorAll('.stab').forEach(b => b.classList.remove('active'));
+      document.getElementById(`tab-${id}`).classList.add('active');
+      document.querySelectorAll('.stab').forEach(b => {
+        if (b.getAttribute('onclick').includes(`'${id}'`)) b.classList.add('active');
+      });
+      if (id === 'queue') loadQueue();
+      if (id === 'publer' && publerAccounts.length === 0) { /* wait for user to click fetch */ }
+    }
+
+    // ── Toast ───────────────────────────────────────────────────────────────────
+    function toast(msg, isError = false) {
+      const t = document.getElementById('toast');
+      t.textContent = msg;
+      t.className = 'toast visible' + (isError ? ' error' : '');
+      setTimeout(() => t.className = 'toast', 2800);
+    }
+
+    // ── Load settings on page load ──────────────────────────────────────────────
+    async function loadSettings() {
+      try {
+        const r = await fetch(`${API}/api/settings`);
+        settings = await r.json();
+
+        // API Keys tab (show masked)
+        setVal('koofr_email', settings.koofr_email);
+        setVal('koofr_app_password', settings.koofr_app_password || '');
+        setVal('anthropic_api_key', settings.anthropic_api_key || '');
+        setVal('publer_api_key', settings.publer_api_key || '');
+        setVal('publer_workspace_id', settings.publer_workspace_id);
+        setVal('pexels_api_key', settings.pexels_api_key || '');
+        setVal('elevenlabs_api_key', settings.elevenlabs_api_key || '');
+        setVal('elevenlabs_voice_id', settings.elevenlabs_voice_id || '');
+        setVal('fal_api_key', settings.fal_api_key || '');
+        setVal('wavespeed_api_key', settings.wavespeed_api_key || '');
+        setVal('vertex_project_id', settings.vertex_project_id || '');
+        setVal('vertex_location', settings.vertex_location || 'us-central1');
+        setVal('google_credentials_path', settings.google_credentials_path || '');
+
+        // Koofr tab
+        setVal('koofr_default_folder', settings.koofr_default_folder || '/');
+        setCheck('pexels_gap_fill_enabled', settings.pexels_gap_fill_enabled);
+
+        // Output tab
+        setVal('local_output_dir', settings.local_output_dir || '');
+        updateOutputStatus(settings.local_output_dir || '');
+
+        // Brand voice
+        setVal('brand_voice', settings.brand_voice);
+
+        // Publer
+        setCheck('publer_enabled', settings.publer_enabled);
+        setCheck('publer_auto_schedule', settings.publer_auto_schedule);
+        setVal('publer_schedule_time', settings.publer_schedule_time || '09:00');
+
+        // Queue
+        setCheck('queue_auto_run', settings.queue_auto_run);
+        setVal('queue_run_interval_hours', settings.queue_run_interval_hours || 24);
+      } catch (e) {
+        toast('Could not load settings: ' + e.message, true);
+      }
+    }
+
+    function setVal(id, val) {
+      const el = document.getElementById(id);
+      if (el && val !== undefined && val !== null) el.value = val;
+    }
+
+    function setCheck(id, val) {
+      const el = document.getElementById(id);
+      if (el) el.checked = !!val;
+    }
+
+    // ── Save API Keys ───────────────────────────────────────────────────────────
+    async function saveApiKeys() {
+      const body = {};
+      const fields = ['koofr_email', 'koofr_app_password', 'anthropic_api_key',
+                      'publer_api_key', 'publer_workspace_id', 'pexels_api_key',
+                      'elevenlabs_api_key', 'elevenlabs_voice_id',
+                      'fal_api_key', 'wavespeed_api_key',
+                      'vertex_project_id', 'vertex_location', 'google_credentials_path'];
+      fields.forEach(f => {
+        const v = document.getElementById(f).value.trim();
+        if (v && v !== '••••••••') body[f] = v;
+      });
+      await saveSettings(body, 'API keys saved!');
+    }
+
+    // ── Output directory helpers ────────────────────────────────────────────────
+    function updateOutputStatus(path) {
+      const status = document.getElementById('output-dir-status');
+      const clearBtn = document.getElementById('btn-clear-output');
+      document.getElementById('local_output_dir').value = path || '';
+      if (path) {
+        status.innerHTML = `<span style="color:#a78bfa">📁 <strong>${path}</strong></span>`;
+        clearBtn.style.display = 'inline-block';
+      } else {
+        status.textContent = 'No folder selected — files stay in the project directory only.';
+        clearBtn.style.display = 'none';
+      }
+    }
+
+    async function pickOutputFolder() {
+      const btn = document.querySelector('[onclick="pickOutputFolder()"]');
+      if (btn) { btn.disabled = true; btn.textContent = 'Opening…'; }
+      try {
+        const r = await fetch(`${API}/api/pick-folder`, { method: 'POST' });
+        if (!r.ok) return; // user cancelled
+        const { path } = await r.json();
+        updateOutputStatus(path);
+        await saveOutputSettings();
+      } catch (e) {
+        toast('Could not open folder picker: ' + e.message, true);
+      } finally {
+        if (btn) { btn.disabled = false; btn.textContent = 'Choose Folder…'; }
+      }
+    }
+
+    function clearOutputFolder() {
+      updateOutputStatus('');
+    }
+
+    async function saveOutputSettings() {
+      const path = document.getElementById('local_output_dir').value;
+      await saveSettings({ local_output_dir: path }, path ? 'Output folder saved!' : 'Output folder cleared.');
+    }
+
+    // ── Save Koofr settings ─────────────────────────────────────────────────────
+    async function saveKoofrSettings() {
+      await saveSettings({
+        koofr_default_folder: document.getElementById('koofr_default_folder').value,
+        pexels_gap_fill_enabled: document.getElementById('pexels_gap_fill_enabled').checked,
+      }, 'Koofr settings saved!');
+    }
+
+    // ── Save Brand Voice ────────────────────────────────────────────────────────
+    async function saveBrandVoice() {
+      await saveSettings({
+        brand_voice: document.getElementById('brand_voice').value,
+      }, 'Brand voice saved!');
+    }
+
+    // ── Save Publer settings ────────────────────────────────────────────────────
+    async function savePublerSettings() {
+      const defaultIds = publerAccounts
+        .filter(a => document.getElementById(`acc-${a.id}`)?.checked)
+        .map(a => a.id);
+      await saveSettings({
+        publer_enabled: document.getElementById('publer_enabled').checked,
+        publer_auto_schedule: document.getElementById('publer_auto_schedule').checked,
+        publer_schedule_time: document.getElementById('publer_schedule_time').value,
+        publer_default_account_ids: defaultIds,
+      }, 'Publer settings saved!');
+    }
+
+    // ── Save Queue settings ─────────────────────────────────────────────────────
+    async function saveQueueSettings() {
+      await saveSettings({
+        queue_auto_run: document.getElementById('queue_auto_run').checked,
+        queue_run_interval_hours: parseInt(document.getElementById('queue_run_interval_hours').value),
+      }, 'Queue settings saved!');
+    }
+
+    async function saveSettings(body, successMsg) {
+      try {
+        const r = await fetch(`${API}/api/settings`, {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify(body),
+        });
+        if (!r.ok) throw new Error((await r.json()).detail || 'Save failed');
+        toast(successMsg || 'Saved!');
+      } catch (e) {
+        toast(e.message, true);
+      }
+    }
+
+    // ── Koofr folder browser ────────────────────────────────────────────────────
+    async function loadKoofrFolders() {
+      const browser = document.getElementById('folder-browser');
+      browser.style.display = 'block';
+      const list = document.getElementById('folder-list');
+      list.innerHTML = '<span style="color:#555;font-size:12px">Loading...</span>';
+
+      try {
+        const r = await fetch(`${API}/koofr/clips?path=/`);
+        const data = await r.json();
+        list.innerHTML = '';
+
+        const rootItem = document.createElement('div');
+        rootItem.className = 'folder-item';
+        rootItem.textContent = '📁 / (root)';
+        rootItem.onclick = () => selectFolder('/');
+        list.appendChild(rootItem);
+
+        (data.subfolders || []).forEach(sf => {
+          const item = document.createElement('div');
+          item.className = 'folder-item';
+          item.textContent = '📁 ' + sf.name;
+          item.onclick = () => selectFolder(sf.path);
+          list.appendChild(item);
+        });
+      } catch (e) {
+        list.innerHTML = `<span style="color:#f87171;font-size:12px">Error: ${e.message}. Check your Koofr credentials.</span>`;
+      }
+    }
+
+    function selectFolder(path) {
+      document.getElementById('koofr_default_folder').value = path;
+      document.querySelectorAll('.folder-item').forEach(i => i.classList.remove('selected'));
+      event.target.classList.add('selected');
+    }
+
+    // ── Publer accounts ─────────────────────────────────────────────────────────
+    async function fetchPublerAccountsBtn() {
+      const btn = document.getElementById('btn-fetch-publer');
+      btn.disabled = true; btn.textContent = 'Loading…';
+      await fetchPublerAccounts();
+      btn.disabled = false; btn.textContent = 'Fetch Accounts';
+    }
+
+    async function fetchPublerAccounts() {
+      const container = document.getElementById('publer-accounts-container');
+      container.innerHTML = '<p style="font-size:12px;color:#555">Loading accounts...</p>';
+      try {
+        const r = await fetch(`${API}/api/publer/accounts`);
+        if (!r.ok) {
+          const err = await r.json();
+          throw new Error(err.detail || 'Failed to fetch accounts');
+        }
+        const data = await r.json();
+        publerAccounts = data.accounts || [];
+
+        if (!publerAccounts.length) {
+          container.innerHTML = '<p style="font-size:12px;color:#555">No accounts found. Make sure your Publer API key and workspace ID are set.</p>';
+          return;
+        }
+
+        const defaultIds = settings.publer_default_account_ids || [];
+        container.innerHTML = '<p style="font-size:12px;color:#666;margin-bottom:8px;font-size:11px">Click to select default accounts for posting:</p>';
+        const grid = document.createElement('div');
+        grid.className = 'account-grid';
+
+        publerAccounts.forEach(acc => {
+          const isSelected = defaultIds.includes(acc.id);
+          const card = document.createElement('div');
+          card.className = 'account-card' + (isSelected ? ' selected' : '');
+          card.dataset.id = acc.id;
+          card.innerHTML = `
+            <input type="checkbox" id="acc-${acc.id}" ${isSelected ? 'checked' : ''} />
+            <div class="acc-check">${isSelected ? '✓' : ''}</div>
+            <div class="acc-info">
+              <div class="name">${acc.name || acc.username || 'Account'}</div>
+              <div class="username"><span class="platform-badge">${acc.platform || 'social'}</span></div>
+            </div>
+          `;
+          card.addEventListener('click', () => {
+            const cb = card.querySelector('input[type="checkbox"]');
+            cb.checked = !cb.checked;
+            card.classList.toggle('selected', cb.checked);
+            card.querySelector('.acc-check').textContent = cb.checked ? '✓' : '';
+          });
+          grid.appendChild(card);
+        });
+        container.appendChild(grid);
+      } catch (e) {
+        container.innerHTML = `<p style="font-size:12px;color:#f87171">Error: ${e.message}</p>`;
+      }
+    }
+
+    // ── Queue ────────────────────────────────────────────────────────────────────
+    function toggleQueuePubler() {
+      const show = document.getElementById('q-publer-push').checked;
+      document.getElementById('q-publer-config').style.display = show ? 'block' : 'none';
+    }
+
+    async function loadQueue() {
+      const container = document.getElementById('queue-list-container');
+      try {
+        const r = await fetch(`${API}/api/queue`);
+        const data = await r.json();
+        const items = data.queue || [];
+
+        if (!items.length) {
+          container.innerHTML = '<p style="font-size:12px;color:#555;margin-top:8px">Queue is empty. Add a reel idea above.</p>';
+          return;
+        }
+
+        container.innerHTML = '';
+        const list = document.createElement('div');
+        list.className = 'queue-list';
+
+        items.forEach(item => {
+          const card = document.createElement('div');
+          card.className = 'queue-card';
+          const b = item.brief || {};
+          const modeLabel = b.prompt || b.text_hints || `${b.mode} mode`;
+          const statusClass = `status-${item.status}`;
+
+          card.innerHTML = `
+            <div class="qc-header">
+              <div class="qc-title">${item.notes || modeLabel || 'Untitled reel'}</div>
+              <span class="qc-status ${statusClass}">${item.status}</span>
+            </div>
+            <div class="qc-meta">
+              ${b.mode || 'random'} · ${b.target_duration_seconds || 30}s
+              ${item.publer_push ? ' · 📤 Publer' : ''}
+              · Added ${new Date(item.created_at).toLocaleDateString()}
+            </div>
+            <div class="qc-actions">
+              ${item.status === 'pending' ? `<button class="btn-run" onclick="runQueueItem('${item.id}')">▶ Run Now</button>` : ''}
+              <button class="btn-del" onclick="deleteQueueItem('${item.id}')">Delete</button>
+            </div>
+          `;
+          list.appendChild(card);
+        });
+        container.appendChild(list);
+      } catch (e) {
+        container.innerHTML = `<p style="font-size:12px;color:#f87171">Error loading queue: ${e.message}</p>`;
+      }
+    }
+
+    async function addQueueIdea() {
+      const accountIdsRaw = document.getElementById('q-account-ids').value;
+      const accountIds = accountIdsRaw ? accountIdsRaw.split(',').map(s => s.trim()) : [];
+
+      const body = {
+        mode: document.getElementById('q-mode').value,
+        target_duration_seconds: parseInt(document.getElementById('q-duration').value),
+        prompt: document.getElementById('q-prompt').value || null,
+        koofr_folder: document.getElementById('q-folder').value || null,
+        notes: document.getElementById('q-notes').value,
+        include_text: true,
+        publer_push: document.getElementById('q-publer-push').checked,
+        publer_account_ids: accountIds,
+        publer_caption: document.getElementById('q-caption').value || '',
+      };
+
+      try {
+        const r = await fetch(`${API}/api/queue`, {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify(body),
+        });
+        if (!r.ok) throw new Error('Failed to add to queue');
+        toast('Added to queue!');
+        loadQueue();
+        // Clear form
+        ['q-prompt', 'q-folder', 'q-notes', 'q-caption', 'q-account-ids'].forEach(id => {
+          document.getElementById(id).value = '';
+        });
+      } catch (e) {
+        toast(e.message, true);
+      }
+    }
+
+    async function runQueueItem(id) {
+      try {
+        const r = await fetch(`${API}/api/queue/${id}/run`, { method: 'POST' });
+        if (!r.ok) throw new Error('Failed to start');
+        toast('Reel generation started! Check the Studio for progress.');
+        loadQueue();
+      } catch (e) {
+        toast(e.message, true);
+      }
+    }
+
+    async function deleteQueueItem(id) {
+      try {
+        const r = await fetch(`${API}/api/queue/${id}`, { method: 'DELETE' });
+        if (!r.ok) throw new Error('Delete failed');
+        loadQueue();
+      } catch (e) {
+        toast(e.message, true);
+      }
+    }
+
+    // ── Init ─────────────────────────────────────────────────────────────────────
+    loadSettings();
+  </script>
+</body>
+</html>

@@ -1,0 +1,14 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "publish_log",
+  "type": "object",
+  "required": ["version", "local_path", "file_size_bytes", "timestamp"],
+  "properties": {
+    "version": { "type": "string" },
+    "local_path": { "type": "string" },
+    "file_size_bytes": { "type": "integer", "minimum": 1 },
+    "duration_seconds": { "type": "number" },
+    "timestamp": { "type": "string" }
+  },
+  "additionalProperties": false
+}

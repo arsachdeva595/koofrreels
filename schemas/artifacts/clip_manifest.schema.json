@@ -1,0 +1,38 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "clip_manifest",
+  "type": "object",
+  "required": ["version", "clips"],
+  "properties": {
+    "version": { "type": "string" },
+    "clips": {
+      "type": "array",
+      "minItems": 2,
+      "items": {
+        "type": "object",
+        "required": ["clip_id", "koofr_file_id", "local_path", "duration_seconds", "resolution", "fps"],
+        "properties": {
+          "clip_id": { "type": "string" },
+          "koofr_file_id": { "type": "string" },
+          "filename": { "type": "string" },
+          "local_path": { "type": "string" },
+          "duration_seconds": { "type": "number", "minimum": 0 },
+          "resolution": {
+            "type": "object",
+            "required": ["width", "height"],
+            "properties": {
+              "width": { "type": "integer" },
+              "height": { "type": "integer" }
+            }
+          },
+          "fps": { "type": "number" },
+          "selection_reason": { "type": ["string", "null"] },
+          "score": { "type": ["number", "null"] }
+        },
+        "additionalProperties": false
+      }
+    },
+    "total_available_duration_seconds": { "type": "number" }
+  },
+  "additionalProperties": false
+}

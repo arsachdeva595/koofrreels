@@ -1,0 +1,68 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "final_review",
+  "type": "object",
+  "required": ["version", "status", "checks"],
+  "properties": {
+    "version": { "type": "string" },
+    "status": {
+      "type": "string",
+      "enum": ["pass", "revise", "fail"]
+    },
+    "checks": {
+      "type": "object",
+      "properties": {
+        "technical_probe": {
+          "type": "object",
+          "properties": {
+            "resolution": { "type": "string" },
+            "codec": { "type": "string" },
+            "fps": { "type": "number" },
+            "duration_seconds": { "type": "number" },
+            "file_size_bytes": { "type": "integer" },
+            "is_playable": { "type": "boolean" },
+            "warnings": { "type": "array", "items": { "type": "string" } }
+          }
+        },
+        "frame_spotcheck": {
+          "type": "object",
+          "properties": {
+            "frames_sampled": { "type": "integer" },
+            "issues_found": { "type": "array", "items": { "type": "string" } }
+          }
+        },
+        "audio_check": {
+          "type": "object",
+          "properties": {
+            "music_present": { "type": "boolean" },
+            "original_audio_ducked": { "type": "boolean" },
+            "issues_found": { "type": "array", "items": { "type": "string" } }
+          }
+        },
+        "duration_check": {
+          "type": "object",
+          "properties": {
+            "target_seconds": { "type": "number" },
+            "actual_seconds": { "type": "number" },
+            "within_tolerance": { "type": "boolean" }
+          }
+        }
+      }
+    },
+    "findings": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "severity": { "type": "string", "enum": ["critical", "suggestion", "nitpick"] },
+          "check": { "type": "string" },
+          "description": { "type": "string" },
+          "recommended_action": { "type": "string" }
+        }
+      }
+    },
+    "summary": { "type": "string" },
+    "timestamp": { "type": "string" }
+  },
+  "additionalProperties": false
+}

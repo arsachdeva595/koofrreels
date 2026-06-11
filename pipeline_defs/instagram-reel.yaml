@@ -1,0 +1,181 @@
+name: instagram-reel
+version: "1.0"
+description: Assemble Instagram Reels from Koofr cloud video clips
+category: clips
+stability: production
+
+default_checkpoint_policy: guided
+
+orchestration:
+  mode: sequential
+  max_revisions_per_stage: 2
+  max_wall_time_minutes: 15
+
+required_skills:
+  - pipelines/reels/brief-director
+  - pipelines/reels/clip-selector-director
+  - pipelines/reels/edit-director
+  - pipelines/reels/text-director
+  - pipelines/reels/compose-director
+  - meta/reviewer
+  - meta/checkpoint-protocol
+
+stages:
+  - name: brief
+    skill: pipelines/reels/brief-director
+    produces:
+      - reel_brief
+    tools_available: []
+    checkpoint_required: true
+    human_approval_default: true
+    review_focus:
+      - clip_selection_mode is one of random/describe/browse/folder
+      - target_duration_seconds is between 15 and 90
+      - music_file is set or explicitly null
+      - text_hints captured if user provided any
+    success_criteria:
+      - Schema-valid reel_brief with mode, target_duration_seconds, koofr_folder or clip_ids or prompt
+
+  - name: clip_selection
+    skill: pipelines/reels/clip-selector-director
+    required_artifacts_in:
+      - reel_brief
+    produces:
+      - clip_manifest
+    tools_available:
+      - koofr_browser
+      - koofr_downloader
+      - clip_analyzer
+      - clip_scorer
+    checkpoint_required: true
+    human_approval_default: true
+    review_focus:
+      - At least 2 clips selected
+      - Each clip has local_path, duration_seconds, resolution
+      - selection_reason present for each clip (especially in describe mode)
+      - Total available duration >= target_duration_seconds
+    success_criteria:
+      - Schema-valid clip_manifest with at least 2 clips
+      - Each clip.local_path resolves to an existing file
+      - Sum of clip durations >= target_duration_seconds
+
+  - name: edit_decisions
+    skill: pipelines/reels/edit-director
+    required_artifacts_in:
+      - reel_brief
+      - clip_manifest
+    produces:
+      - edit_decisions
+    tools_available:
+      - clip_analyzer
+    checkpoint_required: true
+    human_approval_default: false
+    review_focus:
+      - Each cut references a valid clip_id from clip_manifest
+      - trim_in < trim_out for every cut
+      - Sum of (trim_out - trim_in) for all cuts is within target_duration_seconds +/- 5%
+      - transition field is one of hard_cut / fade_to_black / cross_dissolve
+    success_criteria:
+      - Schema-valid edit_decisions
+      - total_duration_seconds within +/- 5% of reel_brief.target_duration_seconds
+
+  - name: text_plan
+    skill: pipelines/reels/text-director
+    required_artifacts_in:
+      - reel_brief
+      - edit_decisions
+    produces:
+      - text_plan
+    tools_available:
+      - claude_text_generator
+    checkpoint_required: true
+    human_approval_default: true
+    skip_if: "reel_brief.include_text == false"
+    review_focus:
+      - title is non-empty string (max 60 chars)
+      - caption is non-empty string or null
+      - font and color values are valid
+      - timing_in_seconds < total reel duration
+    success_criteria:
+      - Schema-valid text_plan
+      - title length <= 60 characters
+
+  - name: compose
+    skill: pipelines/reels/compose-director
+    required_artifacts_in:
+      - reel_brief
+      - clip_manifest
+      - edit_decisions
+      - text_plan
+    produces:
+      - render_report
+    required_tools:
+      - video_trimmer
+      - video_normalizer
+      - video_composer
+      - audio_mixer
+    optional_tools:
+      - text_renderer
+    tools_available:
+      - video_trimmer
+      - video_normalizer
+      - video_composer
+      - text_renderer
+      - audio_mixer
+    checkpoint_required: true
+    human_approval_default: false
+    pre_compose_validation:
+      check_assets_exist: true
+      check_duration_match: true
+      tolerance_pct: 5
+    review_focus:
+      - render_report.output_path exists on disk
+      - render_report.duration_seconds within +/- 5% of target
+      - render_report.resolution is 1080x1920
+      - render_report.codec is h264
+    success_criteria:
+      - Schema-valid render_report
+      - output file exists and passes ffprobe
+      - duration within +/- 5% of target
+
+  - name: final_review
+    skill: meta/reviewer
+    required_artifacts_in:
+      - render_report
+      - edit_decisions
+      - reel_brief
+    produces:
+      - final_review
+    tools_available:
+      - video_prober
+      - frame_sampler
+      - audio_prober
+    checkpoint_required: true
+    human_approval_default: false
+    review_focus:
+      - technical_probe.resolution is 1080x1920
+      - technical_probe.fps is 30
+      - technical_probe.duration_seconds within +/- 5% of target
+      - technical_probe.codec is h264
+      - audio_check.music_present is true
+      - frame_spotcheck shows no black bars on any sampled frame
+    success_criteria:
+      - final_review.status is pass
+      - No critical findings
+
+  - name: deliver
+    skill: pipelines/reels/compose-director
+    required_artifacts_in:
+      - render_report
+      - final_review
+    produces:
+      - publish_log
+    tools_available: []
+    checkpoint_required: true
+    human_approval_default: false
+    review_focus:
+      - publish_log.local_path resolves to existing file
+      - publish_log.file_size_bytes > 0
+    success_criteria:
+      - Schema-valid publish_log
+      - File available for download
