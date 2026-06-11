@@ -9,6 +9,7 @@ audio mix — is identical to stock_runner.
 """
 from __future__ import annotations
 
+import os
 import shutil
 import uuid
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -168,6 +169,17 @@ def run_ai_pipeline(job: Job, params: dict[str, Any]) -> None:
         if not settings_manager.get("vertex_project_id", ""):
             raise RuntimeError(
                 "Google Cloud Project ID not set — add it in Settings → API Keys → Google Cloud"
+            )
+
+        creds_path = settings_manager.get("google_credentials_path", "")
+        if creds_path and not Path(creds_path).exists():
+            raise RuntimeError(
+                f"Google credentials file not found at: {creds_path} — "
+                "check the path in Settings → API Keys → Google Cloud"
+            )
+        if not creds_path and not os.getenv("GOOGLE_APPLICATION_CREDENTIALS"):
+            raise RuntimeError(
+                "Google credentials not configured — set google_credentials_path in Settings → API Keys → Google Cloud"
             )
 
         job.end_stage("brief", "Brief ready")
