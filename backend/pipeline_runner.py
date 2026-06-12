@@ -119,7 +119,7 @@ def run_pipeline(job: Job, brief_params: dict[str, Any]) -> None:
 
         scene_vo_files: dict[int, str] = {}
         scene_vo_durations: dict[int, float] = {}
-        if not params.get("include_voiceover", True):
+        if not brief_params.get("include_voiceover", True):
             job.end_stage("voiceover", "Voiceover disabled — skipping")
         else:
             elevenlabs_key = os.getenv("ELEVENLABS_API_KEY", "") or settings_manager.get("elevenlabs_api_key", "")
