@@ -483,6 +483,109 @@ def run_pipeline(job: Job, brief_params: dict[str, Any]) -> None:
 
 # ── Storyboard generation ──────────────────────────────────────────────────────
 
+# ── Script frameworks ──────────────────────────────────────────────────────────
+# Each framework defines its narrative structure, the per-scene role vocabulary,
+# the JSON role enum, and the "map scenes to roles" instruction. ABT is the default
+# and what every non-AI pipeline uses; the AI Reels UI lets the user pick another.
+_FRAMEWORKS: dict[str, dict] = {
+    "abt": {
+        "name": "ABT",
+        "structure": """FRAMEWORK — ABT (And, But, Therefore):
+Every reel must follow this three-part structure:
+- AND (setup): Establish the world the viewer already lives in. Build identity match — "this is for me."
+- BUT (tension): The open loop. The contradiction. The thing that's broken, misunderstood, or overlooked. This is where retention is won or lost. The viewer's brain cannot close the tab until this is resolved.
+- THEREFORE (resolution): The payoff. The product/brand/idea enters HERE — as the earned solution, never before. If the "But" was a real problem, the "Therefore" should feel like a genuine unlock.""",
+        "roles_block": """SCENE ROLES to use:
+- "hook" — 0–3s, visual+audio pattern interrupt, tension promise (no brand, no product)
+- "and" — 3–8s, setup/world, identity match ("most people…", "if you've been doing X…")
+- "but" — 8–18s, the open loop, the contradiction, the real problem (must feel genuinely surprising)
+- "therefore" — 18–27s, the payoff/resolution, product enters here as the earned solution
+- "trigger" — 27–30s, CTA or micro-revelation that triggers shares ("most people don't know this part…")""",
+        "role_enum": "hook|and|but|therefore|trigger",
+        "map_line": "Map scenes to ABT roles (hook → and → but → therefore → trigger). "
+                    "For shorter reels compress: hook+and in scene 1, but in scene 2, therefore+trigger in final scene.",
+    },
+    "pas": {
+        "name": "PAS",
+        "structure": """FRAMEWORK — PAS (Problem, Agitate, Solve):
+- PROBLEM: Open on a pain point the viewer instantly recognizes as their own.
+- AGITATE: Twist the knife — make the cost of the problem vivid and emotional, stack the frustration.
+- SOLVE: Introduce the product/idea as the relief. The payoff must feel proportional to the agitation.""",
+        "roles_block": """SCENE ROLES to use:
+- "problem" — 0–5s, name the viewer's pain, identity match, no brand
+- "agitate" — 5–15s, amplify the problem, show what it costs, build emotional pressure
+- "solve" — 15–25s, the product/idea enters as the fix
+- "cta" — 25–30s, directive to act or share""",
+        "role_enum": "problem|agitate|solve|cta",
+        "map_line": "Map scenes to PAS roles (problem → agitate → solve → cta).",
+    },
+    "aida": {
+        "name": "AIDA",
+        "structure": """FRAMEWORK — AIDA (Attention, Interest, Desire, Action):
+- ATTENTION: A pattern-interrupt hook that stops the scroll.
+- INTEREST: Feed curiosity with an intriguing detail or a fresh angle.
+- DESIRE: Make them want it — benefits, transformation, social proof.
+- ACTION: A clear, specific call to action.""",
+        "roles_block": """SCENE ROLES to use:
+- "attention" — 0–3s, scroll-stopping pattern interrupt, no brand
+- "interest" — 3–10s, build curiosity with a fresh angle or detail
+- "desire" — 10–22s, stoke want through benefits/transformation/proof
+- "action" — 22–30s, clear specific CTA""",
+        "role_enum": "attention|interest|desire|action",
+        "map_line": "Map scenes to AIDA roles (attention → interest → desire → action).",
+    },
+    "hvc": {
+        "name": "Hook-Value-CTA",
+        "structure": """FRAMEWORK — Hook / Value / CTA (high-retention short-form):
+- HOOK: 0–3s pattern interrupt that promises a payoff.
+- VALUE: Deliver the useful or entertaining payoff fast and concretely — the reason to keep watching.
+- CTA: One clear directive (follow, save, share, shop).""",
+        "roles_block": """SCENE ROLES to use:
+- "hook" — 0–3s, pattern interrupt + promise, no brand
+- "value" — 3–24s, deliver the payoff concretely (may span multiple scenes)
+- "cta" — 24–30s, one clear directive""",
+        "role_enum": "hook|value|cta",
+        "map_line": "Map scenes to Hook-Value-CTA roles (hook → value → … → cta). "
+                    "The value section can span several scenes.",
+    },
+    "hpsp": {
+        "name": "Hook→Problem→Shift→Payoff",
+        "structure": """FRAMEWORK — Hook → Problem → Shift → Payoff:
+- HOOK (0–3s): A bold, shocking truth or pattern interrupt that shatters expectations. Zero filler words. e.g. "Everything you know about X is a lie."
+- PROBLEM (3–8s): Make the viewer feel understood — name the struggle or mistake they make every day. e.g. "You're doing X daily and it's quietly destroying your progress."
+- SHIFT (8–15s): Shatter the old belief with an actionable counter-perspective or breakthrough. e.g. "But what if doing less is the real secret?"
+- PAYOFF + CTA (15–30s): Give the clear actionable solution, then a directive. e.g. "Try X. Share this with someone who needs it.\"""",
+        "roles_block": """SCENE ROLES to use:
+- "hook" — 0–3s, bold shocking truth / pattern interrupt, no filler, no brand
+- "problem" — 3–8s, name the viewer's daily mistake, make them feel understood
+- "shift" — 8–15s, shatter the old belief with a counter-perspective / breakthrough
+- "payoff" — 15–30s, actionable solution + CTA directive (share/save/try)""",
+        "role_enum": "hook|problem|shift|payoff",
+        "map_line": "Map scenes to Hook→Problem→Shift→Payoff roles (hook → problem → shift → payoff).",
+    },
+}
+
+_HOOK_ARCHITECTURE = """HOOK ARCHITECTURE (first 3 seconds — fire all three layers simultaneously):
+1. Visual: A relatable before-state, a surprising result, or a pattern interrupt — NOT a product shot.
+2. Audio/Text overlay: Lead with the insight or tension, NOT the brand name. Never open with "Hey guys" or the brand name.
+3. Edit: A sharp cut, zoom into detail, or audio drop that stops passive scrollers."""
+
+_RETENTION_RULES = """RETENTION RULES:
+- Get to the core tension or value within 7 seconds — the setup must never drag
+- Add a re-hook or pattern interrupt every 8–10 seconds (new visual cut, text overlay, tonal shift)
+- Bury a re-hook just before the 7–10 second mark (the "Valley of Disappointment" drop zone)
+- Use the Zeigarnik Effect: one open loop per reel — always close it before the end
+- One idea per reel — never pack multiple benefits"""
+
+_VOICEOVER_RULES = """VOICEOVER WRITING RULES (writing for ears, not eyes):
+- Short sentences. Then shorter. Vary rhythm deliberately.
+- No passive voice. Active, present, direct — always.
+- Say "you" constantly — never "people", "customers", "users"
+- Front-load the tension — lead with the interesting thing, fill in context after
+- Product/brand enters only at the resolution/payoff — never in the hook or setup
+- Read every line aloud — if it doesn't flow naturally spoken, it won't flow naturally heard"""
+
+
 def _generate_storyboard(reel_brief: dict) -> dict:
     import anthropic
 
@@ -541,63 +644,39 @@ textures, close-ups of materials, nature, light, still life, abstract motion, or
 - Replace every human action with object or environment motion. Instead of "a woman painting sunflowers",
   write "a brush gliding across canvas, yellow paint blooming into sunflower petals under warm light".
 - Convey emotion through lighting, color, weather, camera movement, and the subject — never through a person.
-This overrides any human-centric guidance above. The ABT retention structure still applies, but it is told
+This overrides any human-centric guidance above. The chosen retention structure still applies, but it is told
 ENTIRELY through objects and scenery, with zero human presence in the generated visuals.
 """
 
-    system = """You are an expert Instagram Reels scriptwriter. You write scripts for RETENTION, not just views.
+    fw = _FRAMEWORKS.get(reel_brief.get("framework", "abt"), _FRAMEWORKS["abt"])
 
-FRAMEWORK — ABT (And, But, Therefore):
-Every reel must follow this three-part structure:
-- AND (setup): Establish the world the viewer already lives in. Build identity match — "this is for me."
-- BUT (tension): The open loop. The contradiction. The thing that's broken, misunderstood, or overlooked. This is where retention is won or lost. The viewer's brain cannot close the tab until this is resolved.
-- THEREFORE (resolution): The payoff. The product/brand/idea enters HERE — as the earned solution, never before. If the "But" was a real problem, the "Therefore" should feel like a genuine unlock.
-
-HOOK ARCHITECTURE (first 3 seconds — fire all three layers simultaneously):
-1. Visual: A relatable before-state, a surprising result, or a pattern interrupt — NOT a product shot.
-2. Audio/Text overlay: Lead with the insight or tension, NOT the brand name. Never open with "Hey guys" or the brand name.
-3. Edit: A sharp cut, zoom into detail, or audio drop that stops passive scrollers.
-
-RETENTION RULES:
-- Get to the "But" within 7 seconds — the "And" setup must never drag
-- Add a re-hook or pattern interrupt every 8–10 seconds (new visual cut, text overlay, tonal shift)
-- Bury a re-hook just before the 7–10 second mark (the "Valley of Disappointment" drop zone)
-- Use the Zeigarnik Effect: one open loop per reel — always close it before the end
-- One idea per reel — never pack multiple benefits
-
-VOICEOVER WRITING RULES (writing for ears, not eyes):
-- Short sentences. Then shorter. Vary rhythm deliberately.
-- No passive voice. Active, present, direct — always.
-- Say "you" constantly — never "people", "customers", "users"
-- Front-load the tension — lead with the interesting thing, fill in context after
-- Product enters ONLY at the Therefore — never in the hook, never in the And
-- Read every line aloud — if it doesn't flow naturally spoken, it won't flow naturally heard
-
-SCENE ROLES to use:
-- "hook" — 0–3s, visual+audio pattern interrupt, tension promise (no brand, no product)
-- "and" — 3–8s, setup/world, identity match ("most people…", "if you've been doing X…")
-- "but" — 8–18s, the open loop, the contradiction, the real problem (must feel genuinely surprising)
-- "therefore" — 18–27s, the payoff/resolution, product enters here as the earned solution
-- "trigger" — 27–30s, CTA or micro-revelation that triggers shares ("most people don't know this part…")
-""" + (_google_policy_section if _is_ai_reels else "") + (_no_characters_section if _no_characters else "") + """
-Respond ONLY with valid JSON — no markdown fences."""
+    system = (
+        "You are an expert Instagram Reels scriptwriter. You write scripts for RETENTION, not just views.\n\n"
+        + fw["structure"] + "\n\n"
+        + _HOOK_ARCHITECTURE + "\n\n"
+        + _RETENTION_RULES + "\n\n"
+        + _VOICEOVER_RULES + "\n\n"
+        + fw["roles_block"] + "\n"
+        + (_google_policy_section if _is_ai_reels else "")
+        + (_no_characters_section if _no_characters else "")
+        + "\nRespond ONLY with valid JSON — no markdown fences."
+    )
 
     user = (
-        f"Write a {n_scenes}-scene ABT-structured storyboard for this Instagram Reel.\n"
+        f"Write a {n_scenes}-scene {fw['name']}-structured storyboard for this Instagram Reel.\n"
         f"Topic/prompt: {prompt}{context}\n"
         + ("REMINDER: NO CHARACTERS MODE is active — every visual_description and clip_hint must show "
            "ZERO humans/people. Describe only objects, scenery, textures, and the subject.\n" if _no_characters else "")
         + f"Total duration: {target_dur}s (~{dur_per}s per scene)\n\n"
-        "Map scenes to ABT roles (hook → and → but → therefore → trigger). "
-        "For shorter reels compress: hook+and in scene 1, but in scene 2, therefore+trigger in final scene.\n\n"
+        + fw["map_line"] + "\n\n"
         'Return JSON: {"theme": "one-line theme", "scenes": [{'
         '"scene": 1, '
-        '"role": "hook|and|but|therefore|trigger", '
+        f'"role": "{fw["role_enum"]}", '
         '"visual_description": "specific visual direction — what the clip must show, not generic", '
         '"clip_hint": "2-4 keywords to find a matching clip (be specific)", '
         f'"duration_seconds": {dur_per}, '
         '"overlay_text": "Punchy on-screen text max 8 words — front-load tension", '
-        '"voiceover": "Spoken line — short sentences, say you, active voice, no brand name in hook/and"'
+        '"voiceover": "Spoken line — short sentences, say you, active voice, no brand name in hook/setup"'
         "}]}"
     )
 

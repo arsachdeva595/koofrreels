@@ -1179,13 +1179,25 @@
 
     <div class="prompt-block">
       <div class="prompt-label" id="ai-prompt-label">What's your reel about?</div>
-      <div class="prompt-sub" id="ai-prompt-sub">Claude writes an ABT-structured storyboard and generates every clip from scratch with Google Veo3 — no stock footage needed.</div>
+      <div class="prompt-sub" id="ai-prompt-sub">Claude writes a storyboard in your chosen script framework and generates every clip from scratch with Google Veo3 — no stock footage needed.</div>
       <textarea
         class="prompt-input"
         id="ai-prompt"
         placeholder="e.g. why most people quit before they ever really start..."
         rows="3"
       ></textarea>
+    </div>
+
+    <!-- Script framework selector -->
+    <div class="source-block">
+      <div class="section-label">Script framework</div>
+      <select id="ai-framework" style="width:100%;padding:9px 12px;background:var(--bg3);color:var(--text);border:1px solid var(--border2);border-radius:8px;font-size:13px">
+        <option value="abt" selected>ABT — And, But, Therefore (story tension)</option>
+        <option value="pas">PAS — Problem, Agitate, Solve (pain-point selling)</option>
+        <option value="aida">AIDA — Attention, Interest, Desire, Action (conversion)</option>
+        <option value="hvc">Hook · Value · CTA (max retention)</option>
+        <option value="hpsp">Hook → Problem → Shift → Payoff (belief-shift)</option>
+      </select>
     </div>
 
     <!-- Reel type selector -->
@@ -2946,6 +2958,7 @@
       prompt: aiPrompt || null,
       text_hints: aiPrompt || null,
       reel_type: aiReelType,
+      framework: document.getElementById('ai-framework').value,
       character_image_path: aiReelType === 'character' ? aiCharImagePath : null,
       keyframe_paths: aiReelType === 'story' && aiKeyframePaths.length ? aiKeyframePaths : null,
       skip_storyboard: document.getElementById('ai-skip-storyboard').checked,

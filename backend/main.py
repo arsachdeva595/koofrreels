@@ -477,6 +477,7 @@ class AIGenerateRequest(BaseModel):
     keyframe_paths: list[str] | None = None
     skip_storyboard: bool = False                 # use prompt as raw scene script, skip Claude
     skip_edit_planner: bool = False               # use clips as-is, skip cut planning
+    framework: str = "abt"                        # script framework: abt|pas|aida|hvc|hpsp
 
 
 @app.post("/ai/generate")
