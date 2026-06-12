@@ -107,6 +107,7 @@ class Veo3Client(BaseTool):
         prompt: str,
         token: str,
         image_path: str | None = None,
+        negative_prompt: str = "",
     ) -> tuple[str | None, str | None]:
         """POST to Veo3 predictLongRunning. Returns (operation_name, error)."""
         url = VEO3_ENDPOINT_TMPL.format(location=location, project=project_id)
@@ -118,9 +119,12 @@ class Veo3Client(BaseTool):
                 "bytesBase64Encoded": base64.b64encode(Path(image_path).read_bytes()).decode(),
                 "mimeType": mime,
             }
+        parameters: dict = {"sampleCount": 1}
+        if negative_prompt:
+            parameters["negativePrompt"] = negative_prompt
         payload = {
             "instances": [instance],
-            "parameters": {"sampleCount": 1},
+            "parameters": parameters,
         }
         try:
             with httpx.Client(timeout=60) as client:
@@ -207,12 +211,14 @@ class Veo3Client(BaseTool):
           vertex_project_id   str        GCP project ID
           vertex_location     str        Vertex AI region (e.g. "us-central1")
           image_path          str|None   optional reference/keyframe image path
+          negative_prompt     str        optional content to exclude (e.g. speech)
         """
         prompt = params.get("prompt", "")
         dest_path = params["dest_path"]
         project_id = params.get("vertex_project_id", "")
         location = params.get("vertex_location", "us-central1")
         image_path = params.get("image_path")
+        negative_prompt = params.get("negative_prompt", "")
 
         if not project_id:
             return ToolResult(success=False, error="vertex_project_id not provided")
@@ -226,7 +232,7 @@ class Veo3Client(BaseTool):
         if err:
             return ToolResult(success=False, error=err)
 
-        op_name, err = self._submit_generation(project_id, location, prompt, token, image_path)
+        op_name, err = self._submit_generation(project_id, location, prompt, token, image_path, negative_prompt)
         if err:
             return ToolResult(success=False, error=err)
 

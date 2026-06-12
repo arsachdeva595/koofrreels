@@ -288,15 +288,26 @@ def run_ai_pipeline(job: Job, params: dict[str, Any]) -> None:
         CHARACTER_TRIM = 0.5  # seconds to remove from start of each character-mode clip
         _ak = os.getenv("ANTHROPIC_API_KEY", "") or settings_manager.get("anthropic_api_key", "")
 
+        # When ElevenLabs voiceover is enabled, the spoken track comes from ElevenLabs —
+        # so Veo3 clips must carry NO speech of their own (otherwise two voices overlap).
+        # vo_on therefore (a) skips injecting "Character says: ..." into Veo3 prompts and
+        # (b) passes a negative prompt instructing Veo3 to avoid generating any narration.
+        vo_on = params.get("include_voiceover", True)
+        _VEO3_NO_SPEECH = (
+            "speech, narration, voiceover, talking, dialogue, spoken words, "
+            "singing, lip movement, subtitles, captions"
+        )
+
         # ── Batch-rewrite voiceovers → short safe dialogue for Veo3 ──────────
         # One Claude Haiku call converts all scene voiceovers into ≤10-word safe
         # English dialogue snippets. These are passed to Veo3 as:
         #   Character says: "rewritten line"
         # so the model understands the spoken mood without receiving raw Hinglish
         # that might contain policy-triggering words.
+        # Skipped entirely when voiceover is on — Veo3 should not speak in that case.
         scene_dialogues: dict[int, str] = {}
         _vo_raw = {i: s.get("voiceover", "").strip() for i, s in enumerate(scenes) if s.get("voiceover", "").strip()}
-        if _vo_raw and _ak:
+        if not vo_on and _vo_raw and _ak:
             try:
                 import anthropic as _anth, json as _json
                 _lines = "\n".join(f'{i}: {txt}' for i, txt in _vo_raw.items())
@@ -372,6 +383,8 @@ def run_ai_pipeline(job: Job, params: dict[str, Any]) -> None:
             else:
                 image_path = None
 
+            neg_prompt = _VEO3_NO_SPEECH if vo_on else ""
+
             result = Veo3Client().execute({
                 "operation": "text_to_video",
                 "prompt": prompt,
@@ -380,6 +393,7 @@ def run_ai_pipeline(job: Job, params: dict[str, Any]) -> None:
                 "vertex_project_id": project_id_vx,
                 "vertex_location": location,
                 "image_path": image_path,
+                "negative_prompt": neg_prompt,
             })
 
             # ── Auto-retry on policy violation ──────────────────────────────
@@ -394,6 +408,7 @@ def run_ai_pipeline(job: Job, params: dict[str, Any]) -> None:
                     "vertex_project_id": project_id_vx,
                     "vertex_location": location,
                     "image_path": image_path,
+                    "negative_prompt": neg_prompt,
                 })
                 if result.success:
                     dest_path = retry_path
