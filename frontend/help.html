@@ -1,0 +1,431 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>KoofrReels — Help</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      background: #0d0d0d;
+      color: #f0f0f0;
+      min-height: 100vh;
+    }
+
+    header {
+      padding: 18px 32px;
+      border-bottom: 1px solid #222;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    header .left { display: flex; align-items: center; gap: 16px; }
+    header h1 { font-size: 20px; font-weight: 700; }
+    .nav-link {
+      font-size: 13px;
+      color: #888;
+      text-decoration: none;
+      padding: 6px 12px;
+      border-radius: 6px;
+      border: 1px solid #333;
+      transition: all 0.15s;
+    }
+    .nav-link:hover { color: #fff; border-color: #555; }
+
+    .layout {
+      display: grid;
+      grid-template-columns: 220px 1fr;
+      height: calc(100vh - 61px);
+    }
+
+    /* Sidebar tabs */
+    .sidebar {
+      border-right: 1px solid #222;
+      padding: 20px 12px;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      overflow-y: auto;
+    }
+    .sidebar .group-label {
+      font-size: 10px; text-transform: uppercase; letter-spacing: 0.08em;
+      color: #555; padding: 12px 14px 6px;
+    }
+    .stab {
+      padding: 9px 14px;
+      border-radius: 7px;
+      border: none;
+      background: transparent;
+      color: #888;
+      cursor: pointer;
+      font-size: 13px;
+      text-align: left;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      transition: all 0.15s;
+    }
+    .stab:hover { background: #1a1a1a; color: #ccc; }
+    .stab.active { background: #1e1428; color: #a78bfa; font-weight: 600; }
+    .stab .icon { font-size: 15px; }
+
+    /* Content area */
+    .content {
+      overflow-y: auto;
+      padding: 32px 40px;
+      max-width: 780px;
+    }
+
+    .tab-panel { display: none; }
+    .tab-panel.active { display: block; }
+
+    h2 { font-size: 20px; font-weight: 700; margin-bottom: 6px; }
+    h3 { font-size: 14px; font-weight: 600; color: #ddd; margin: 22px 0 10px; }
+    .section-desc { font-size: 13px; color: #999; margin-bottom: 20px; line-height: 1.7; }
+
+    p { font-size: 13px; color: #aaa; line-height: 1.7; margin-bottom: 12px; }
+    strong { color: #ddd; }
+    code {
+      background: #2a2a2a;
+      padding: 1px 6px;
+      border-radius: 3px;
+      font-size: 11.5px;
+      font-family: 'Menlo', monospace;
+      color: #d6bcfa;
+    }
+
+    /* "When to use" context box */
+    .context-box {
+      background: #141124;
+      border: 1px solid #2c2347;
+      border-left: 3px solid #7c3aed;
+      border-radius: 8px;
+      padding: 14px 16px;
+      margin-bottom: 18px;
+    }
+    .context-box .lbl { font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em; color: #a78bfa; font-weight: 600; margin-bottom: 6px; }
+    .context-box p { color: #c7c1d6; margin: 0; }
+
+    /* Prerequisites callout */
+    .prereq {
+      background: #1f1707;
+      border: 1px solid #4a3a12;
+      border-radius: 8px;
+      padding: 12px 16px;
+      margin-bottom: 20px;
+      font-size: 12.5px;
+      color: #e7c878;
+      line-height: 1.7;
+    }
+    .prereq .lbl { font-weight: 700; color: #f5d98a; }
+    .prereq code { background: #3a2c0c; color: #f5d98a; }
+
+    /* Step list */
+    .steps {
+      background: #161616;
+      border: 1px solid #262626;
+      border-radius: 9px;
+      padding: 18px 20px 18px 0;
+      margin-bottom: 18px;
+    }
+    .steps ol { padding-left: 42px; }
+    .steps li { font-size: 13px; color: #b3b3b3; margin-bottom: 11px; line-height: 1.6; }
+    .steps li:last-child { margin-bottom: 0; }
+    .steps li strong { color: #eaeaea; }
+    .steps li code { background: #2a2a2a; color: #d6bcfa; }
+
+    /* Feature table */
+    table { width: 100%; border-collapse: collapse; margin: 8px 0 20px; }
+    th, td { text-align: left; padding: 9px 12px; font-size: 12.5px; border-bottom: 1px solid #242424; vertical-align: top; }
+    th { color: #888; font-weight: 600; font-size: 11px; text-transform: uppercase; letter-spacing: 0.04em; }
+    td { color: #b3b3b3; line-height: 1.6; }
+    td:first-child { color: #e0e0e0; font-weight: 600; white-space: nowrap; }
+
+    .tip { font-size: 12px; color: #6ee7b7; background: #0f1e15; border: 1px solid #1c3a2a; border-radius: 7px; padding: 10px 14px; margin: 14px 0; line-height: 1.6; }
+    .note { font-size: 12px; color: #93c5fd; background: #0f1622; border: 1px solid #1e3252; border-radius: 7px; padding: 10px 14px; margin: 14px 0; line-height: 1.6; }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="left">
+      <h1>📖 Help &amp; Documentation</h1>
+    </div>
+    <a href="/" class="nav-link">← Back to Studio</a>
+  </header>
+
+  <div class="layout">
+    <!-- Sidebar -->
+    <div class="sidebar">
+      <div class="group-label">Modes</div>
+      <button class="stab active" onclick="showTab('reels')"><span class="icon">🎬</span> Reels</button>
+      <button class="stab" onclick="showTab('stock')"><span class="icon">🎞</span> Stock</button>
+      <button class="stab" onclick="showTab('ai')"><span class="icon">🤖</span> AI Reels</button>
+      <button class="stab" onclick="showTab('meme')"><span class="icon">😂</span> Meme Clips</button>
+      <button class="stab" onclick="showTab('audio')"><span class="icon">🎵</span> Audio Clips</button>
+      <div class="group-label">Workflow</div>
+      <button class="stab" onclick="showTab('approve')"><span class="icon">✅</span> Review &amp; Approve</button>
+      <button class="stab" onclick="showTab('publish')"><span class="icon">📤</span> Publish &amp; Schedule</button>
+      <button class="stab" onclick="showTab('output')"><span class="icon">📁</span> Download &amp; Output</button>
+    </div>
+
+    <!-- Content -->
+    <div class="content">
+
+      <!-- ── REELS ──────────────────────────────────────────────────────────── -->
+      <div class="tab-panel active" id="tab-reels">
+        <h2>🎬 Reels — your own footage</h2>
+        <p class="section-desc">Turn the video clips you already have stored in <strong>Koofr cloud</strong> into a polished vertical reel, with AI-chosen clips, title/caption overlays, and an optional voiceover.</p>
+
+        <div class="context-box">
+          <div class="lbl">When to use this</div>
+          <p>Use Reels when you have your <strong>own real footage</strong> — product shots, lifestyle clips, behind-the-scenes — already uploaded to Koofr. This is the most authentic mode: nothing is AI-generated or stock; it stitches and polishes <em>your</em> clips.</p>
+        </div>
+
+        <div class="prereq">
+          <span class="lbl">Needs:</span> Koofr (email + app password) · Anthropic API key (for AI clip picking &amp; text) · ElevenLabs key <em>(optional, only for voiceover)</em>. Set these in <code>Settings → API Keys</code>.
+        </div>
+
+        <h3>Choosing where clips come from</h3>
+        <table>
+          <tr><th>Source</th><th>What it does</th></tr>
+          <tr><td>✦ AI picks</td><td>Claude scores every clip in your Koofr library by its filename and picks the ones that best match your prompt. Easiest option.</td></tr>
+          <tr><td>🎬 Browse</td><td>Type a Koofr folder path, click <strong>Load</strong>, and hand-pick the exact clips you want.</td></tr>
+          <tr><td>📁 Folder</td><td>Use <em>all</em> clips inside a folder path you specify.</td></tr>
+          <tr><td>🎲 Random</td><td>Picks clips at random from your library — great for quick tests.</td></tr>
+        </table>
+
+        <h3>How to make a Reel</h3>
+        <div class="steps">
+          <ol>
+            <li>Open the <strong>🎬 Reels</strong> tab.</li>
+            <li>In <strong>"What's your reel about?"</strong> describe the vibe/theme (e.g. <em>"golden hour at the beach, summer energy"</em>).</li>
+            <li>Under <strong>"Where to pull clips from"</strong> pick a source pill (AI picks / Browse / Folder / Random) and, for Browse/Folder, enter the Koofr path.</li>
+            <li>Set <strong>Duration</strong> (15–90s) and a <strong>Music</strong> track (or leave "Random from library").</li>
+            <li>Toggle <strong>Add title &amp; caption overlay</strong> and <strong>Generate voiceover</strong> as desired.</li>
+            <li>Click <strong>✦ Generate Reel</strong>. When the storyboard is ready it pauses for your review — see <a href="#" onclick="showTab('approve');return false;" style="color:#a78bfa">Review &amp; Approve</a>.</li>
+            <li>After rendering, preview, then <a href="#" onclick="showTab('output');return false;" style="color:#a78bfa">download</a> or <a href="#" onclick="showTab('publish');return false;" style="color:#a78bfa">publish</a>.</li>
+          </ol>
+        </div>
+        <div class="tip">💡 Name your Koofr clips descriptively (e.g. <code>beach-sunset-slowmo.mp4</code>). "AI picks" reads filenames, so good names = better matches.</div>
+      </div>
+
+      <!-- ── STOCK ──────────────────────────────────────────────────────────── -->
+      <div class="tab-panel" id="tab-stock">
+        <h2>🎞 Stock — Pexels stock video</h2>
+        <p class="section-desc">No footage of your own? Claude writes a full scene-by-scene storyboard, then finds a matching <strong>Pexels stock video</strong> for every scene and assembles them into a reel.</p>
+
+        <div class="context-box">
+          <div class="lbl">When to use this</div>
+          <p>Use Stock for <strong>concept, educational, or marketing reels</strong> where you don't have your own clips — e.g. motivational, tips, or storytelling content that just needs good-looking generic b-roll behind the message.</p>
+        </div>
+
+        <div class="prereq">
+          <span class="lbl">Needs:</span> Pexels API key (free) · Anthropic API key · ElevenLabs key <em>(optional, voiceover)</em>. Set in <code>Settings → API Keys</code>.
+        </div>
+
+        <h3>How to make a Stock Reel</h3>
+        <div class="steps">
+          <ol>
+            <li>Open the <strong>🎞 Stock</strong> tab.</li>
+            <li>Write your topic/message in the prompt (e.g. <em>"the cost of not starting your business today"</em>).</li>
+            <li>Set <strong>Duration</strong> and <strong>Music</strong>.</li>
+            <li>Toggles: <strong>title &amp; caption overlay</strong>, <strong>voiceover</strong>, and <strong>Use brand guidelines</strong> (applies your Brand Voice from Settings).</li>
+            <li>Advanced: <strong>Skip storyboard — use my own script</strong> lets you paste a scene-by-scene script directly instead of having Claude write one.</li>
+            <li>Click <strong>🎞 Generate Stock Reel</strong>, then <strong>review &amp; approve</strong> the storyboard.</li>
+            <li>Preview → download or publish.</li>
+          </ol>
+        </div>
+        <div class="note">ℹ️ Each scene's stock clip is found using the AI-generated "clip hint" from the storyboard. If a scene looks off, you can re-generate or tweak your prompt to steer the visuals.</div>
+      </div>
+
+      <!-- ── AI REELS ───────────────────────────────────────────────────────── -->
+      <div class="tab-panel" id="tab-ai">
+        <h2>🤖 AI Reels — generated with Google Veo3</h2>
+        <p class="section-desc">Every clip is generated from scratch by <strong>Google Veo3</strong> — fully original footage that exists nowhere else. The most powerful and brand-controllable mode.</p>
+
+        <div class="context-box">
+          <div class="lbl">When to use this</div>
+          <p>Use AI Reels when you want <strong>completely original, on-brand visuals</strong> with no stock footage and no need to film anything — including showcasing a product, a recurring character, or pure scenery.</p>
+        </div>
+
+        <div class="prereq">
+          <span class="lbl">Needs:</span> Google Cloud <strong>Vertex project ID</strong> + <strong>credentials JSON</strong> (<code>Settings → Google Cloud</code>) · Anthropic API key · ElevenLabs key <em>(optional, voiceover)</em>.
+        </div>
+
+        <h3>Reel types</h3>
+        <table>
+          <tr><th>Type</th><th>What it does</th></tr>
+          <tr><td>📖 Story Driven</td><td>Optionally upload one keyframe image per scene; each becomes that scene's first frame. Leave empty for pure text-to-video.</td></tr>
+          <tr><td>🎭 Character Driven</td><td>Upload one reference image used as the visual anchor in <em>every</em> clip — keeps a consistent character/person throughout.</td></tr>
+          <tr><td>🚫 No Characters</td><td>Forces <strong>zero humans</strong> on screen — only objects, scenery, textures, and the subject. Good for product/abstract/nature stories.</td></tr>
+          <tr><td>🛍️ Product</td><td>Upload a product image. Claude reads the product from the image, builds the story around it, and shows the product in the key "hero" scenes.</td></tr>
+        </table>
+
+        <h3>Script framework</h3>
+        <p>The selector at the top of AI mode controls the <strong>storytelling structure</strong> Claude uses:</p>
+        <table>
+          <tr><th>Framework</th><th>Best for</th></tr>
+          <tr><td>ABT</td><td>And · But · Therefore — classic story tension (default).</td></tr>
+          <tr><td>PAS</td><td>Problem · Agitate · Solve — pain-point selling.</td></tr>
+          <tr><td>AIDA</td><td>Attention · Interest · Desire · Action — conversion-focused.</td></tr>
+          <tr><td>Hook·Value·CTA</td><td>Pure short-form retention — fast value + clear CTA.</td></tr>
+          <tr><td>Hook→Problem→Shift→Payoff</td><td>Belief-shift: bold hook, name the mistake, flip it, deliver the fix.</td></tr>
+        </table>
+
+        <h3>How to make an AI Reel</h3>
+        <div class="steps">
+          <ol>
+            <li>Open the <strong>🤖 AI Reels</strong> tab.</li>
+            <li>Pick a <strong>Script framework</strong> from the dropdown at the top.</li>
+            <li>Choose a <strong>Reel type</strong> (Story / Character / No Characters / Product). For Character or Product, upload the reference/product image in the panel that appears.</li>
+            <li>Write your prompt, set <strong>Duration</strong> and <strong>Music</strong>.</li>
+            <li>Toggles: <strong>title &amp; caption</strong>, <strong>Generate voiceover</strong>, <strong>brand guidelines</strong>, <strong>skip storyboard</strong>, and <strong>skip edit planner</strong> (plays clips as generated, no auto-trimming).</li>
+            <li>Click <strong>Generate</strong>, then <strong>review &amp; approve</strong> the storyboard.</li>
+            <li>Preview → download or publish.</li>
+          </ol>
+        </div>
+        <div class="tip">💡 With <strong>Generate voiceover ON</strong>, the AI clips are made <em>silent of speech</em> on purpose — your ElevenLabs voice is the only narration, so the two never clash. Turn it off and Veo3 will speak the dialogue itself.</div>
+        <div class="note">ℹ️ Veo3 clips are 8 seconds max each; longer reels are built by generating and joining several clips. Generation takes a few minutes per reel.</div>
+      </div>
+
+      <!-- ── MEME CLIPS ─────────────────────────────────────────────────────── -->
+      <div class="tab-panel" id="tab-meme">
+        <h2>😂 Meme Clips — one clip, big caption</h2>
+        <p class="section-desc">A fast, single-clip format: take one clip from your Koofr library and burn a punchy meme caption straight onto it.</p>
+
+        <div class="context-box">
+          <div class="lbl">When to use this</div>
+          <p>Use Meme Clips for <strong>quick, trend-style posts</strong> — relatable one-liners, reaction clips, or punchy captioned moments. Low effort, high frequency.</p>
+        </div>
+
+        <div class="prereq">
+          <span class="lbl">Needs:</span> Koofr (email + app password) · Anthropic API key (writes/places the meme text) · ElevenLabs key <em>(optional, voiceover)</em>.
+        </div>
+
+        <h3>How to make a Meme Clip</h3>
+        <div class="steps">
+          <ol>
+            <li>Open the <strong>😂 Meme Clips</strong> tab.</li>
+            <li>Write the meme idea/caption prompt.</li>
+            <li>Choose a clip source: <strong>🎲 Random</strong> (a random Koofr clip) or <strong>🎬 Browse</strong> (load a folder and pick one).</li>
+            <li>Set <strong>Clip length</strong> (3–30s) and <strong>Music</strong>.</li>
+            <li>Optionally enable <strong>Generate voiceover</strong>.</li>
+            <li>Click <strong>😂 Generate Meme Clip</strong> → review &amp; approve → download/publish.</li>
+          </ol>
+        </div>
+      </div>
+
+      <!-- ── AUDIO CLIPS ────────────────────────────────────────────────────── -->
+      <div class="tab-panel" id="tab-audio">
+        <h2>🎵 Audio Clips — driven by a sound</h2>
+        <p class="section-desc">Start from a <strong>trending audio track</strong>. Claude writes per-scene overlay text that tells a story synced to the audio, and the clip length matches the track.</p>
+
+        <div class="context-box">
+          <div class="lbl">When to use this</div>
+          <p>Use Audio Clips for the <strong>trending-audio format</strong> — where a popular sound carries the post and on-screen text delivers the story beat-by-beat.</p>
+        </div>
+
+        <div class="prereq">
+          <span class="lbl">Needs:</span> An audio file or a music-library track · Anthropic API key (writes the overlay text).
+        </div>
+
+        <h3>How to make an Audio Clip</h3>
+        <div class="steps">
+          <ol>
+            <li>Open the <strong>🎵 Audio Clips</strong> tab.</li>
+            <li>In <strong>"Describe the narrative"</strong> write the story/vibe (e.g. <em>"a day in the life, morning routine energy"</em>).</li>
+            <li>Choose the audio: <strong>⬆ Upload file</strong> (MP3, M4A, WAV) or <strong>🎵 Music library</strong> (pick a track). The audio's duration sets the clip length.</li>
+            <li>Generate → review &amp; approve the per-scene text → download/publish.</li>
+          </ol>
+        </div>
+      </div>
+
+      <!-- ── REVIEW & APPROVE ───────────────────────────────────────────────── -->
+      <div class="tab-panel" id="tab-approve">
+        <h2>✅ Review &amp; Approve</h2>
+        <p class="section-desc">Every mode pauses after planning so you can review the script before any rendering (and any paid API generation) happens.</p>
+
+        <div class="context-box">
+          <div class="lbl">Why this step exists</div>
+          <p>Rendering and AI clip generation cost time and API credits. The approval gate lets you catch a bad storyboard <strong>before</strong> spending them — and tweak the words first.</p>
+        </div>
+
+        <h3>What you can do in the review modal</h3>
+        <table>
+          <tr><th>Tab</th><th>What it shows</th></tr>
+          <tr><td>Scenes</td><td>One card per scene. You can <strong>edit the overlay text and voiceover</strong> line for each scene before approving.</td></tr>
+          <tr><td>Summary</td><td>The reel's theme, duration, scene count, and music at a glance.</td></tr>
+          <tr><td>Flags</td><td>Any content-policy warnings detected in the visuals (e.g. risky words) so you can fix them first.</td></tr>
+        </table>
+
+        <div class="steps">
+          <ol>
+            <li>After you click Generate, wait for the status to reach <strong>"awaiting your approval."</strong></li>
+            <li>The review modal opens — read the scene cards.</li>
+            <li>Edit any <strong>overlay text</strong> or <strong>voiceover</strong> lines you want to change.</li>
+            <li>Click <strong>Approve</strong> to start rendering, or close to cancel.</li>
+          </ol>
+        </div>
+        <div class="note">ℹ️ The <strong>visual description</strong> of each scene isn't editable here. In AI Reels, control the visuals up front via the <strong>Reel type</strong> (e.g. No Characters / Product) and <strong>Script framework</strong> instead.</div>
+      </div>
+
+      <!-- ── PUBLISH & SCHEDULE ─────────────────────────────────────────────── -->
+      <div class="tab-panel" id="tab-publish">
+        <h2>📤 Publish &amp; Schedule</h2>
+        <p class="section-desc">Push a finished reel straight to your social accounts through <strong>Publer</strong>, post now or schedule for later — without leaving the app.</p>
+
+        <div class="prereq">
+          <span class="lbl">Needs:</span> Publer API key + Workspace ID, enabled in <code>Settings → Publer</code>. Click <strong>Fetch Accounts</strong> there once to load your connected social accounts.
+        </div>
+
+        <h3>Publish a finished reel</h3>
+        <div class="steps">
+          <ol>
+            <li>Generate and approve a reel so it finishes rendering.</li>
+            <li>In the result view, choose <strong>Push to Publer</strong>.</li>
+            <li>Select the target social account(s), write your caption.</li>
+            <li>Post now, or set a <strong>schedule time</strong> to queue it for later.</li>
+          </ol>
+        </div>
+
+        <h3>The Queue (batch ideas)</h3>
+        <p>In <code>Settings → Queue</code> you can add reel ideas in advance and run them on demand. With <strong>auto-run</strong> enabled (and an interval), queued ideas generate automatically — and if an idea has Publer push configured, the finished reel is scheduled for you.</p>
+        <div class="tip">💡 Set your default Publer accounts, auto-schedule, and post time once in <code>Settings → Publer</code> so every push pre-fills them.</div>
+      </div>
+
+      <!-- ── DOWNLOAD & OUTPUT ──────────────────────────────────────────────── -->
+      <div class="tab-panel" id="tab-output">
+        <h2>📁 Download &amp; Output</h2>
+        <p class="section-desc">Every finished reel can be previewed in-app and downloaded as an MP4.</p>
+
+        <h3>Download a reel</h3>
+        <div class="steps">
+          <ol>
+            <li>When a job completes, the result view shows a video preview.</li>
+            <li>Click <strong>Download</strong> to save the <code>.mp4</code> to your computer.</li>
+          </ol>
+        </div>
+
+        <h3>Auto-save to a local folder</h3>
+        <p>In <code>Settings → Output</code> you can set a <strong>Local output folder</strong>. When set, every finished reel is also copied there automatically — so all your renders collect in one place without manual downloads.</p>
+        <div class="note">ℹ️ On the hosted server, the output folder lives on the server (e.g. <code>/opt/koofrreels/outputs</code>). Use the in-app Download button to pull a reel to your own machine.</div>
+      </div>
+
+    </div>
+  </div>
+
+  <script>
+    function showTab(id) {
+      document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+      document.querySelectorAll('.stab').forEach(b => b.classList.remove('active'));
+      document.getElementById(`tab-${id}`).classList.add('active');
+      document.querySelectorAll('.stab').forEach(b => {
+        if (b.getAttribute('onclick').includes(`'${id}'`)) b.classList.add('active');
+      });
+      document.querySelector('.content').scrollTop = 0;
+    }
+  </script>
+</body>
+</html>

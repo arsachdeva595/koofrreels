@@ -59,6 +59,14 @@ async def settings_page():
     raise HTTPException(status_code=404, detail="Settings page not found")
 
 
+@app.get("/help", response_class=HTMLResponse)
+async def help_page():
+    page = frontend_dir / "help.html"
+    if page.exists():
+        return HTMLResponse(page.read_text())
+    raise HTTPException(status_code=404, detail="Help page not found")
+
+
 # ── Koofr endpoints ────────────────────────────────────────────────────────────
 
 @app.get("/koofr/folders")
