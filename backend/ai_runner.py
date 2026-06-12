@@ -325,7 +325,8 @@ def run_ai_pipeline(job: Job, params: dict[str, Any]) -> None:
         reel_type = params.get("reel_type", "story")
         character_image_path = params.get("character_image_path")
         keyframe_paths = params.get("keyframe_paths") or []
-        # Reference-capable model for UGC (creator+product). Configurable in Settings.
+        # Veo models — both configurable in Settings → Google Cloud.
+        standard_model = settings_manager.get("veo_standard_model") or "veo-3.1-lite-generate-001"
         ugc_model = settings_manager.get("veo_reference_model") or "veo-3.1-generate-001"
         n_scenes = len(scenes)
 
@@ -452,7 +453,7 @@ def run_ai_pipeline(job: Job, params: dict[str, Any]) -> None:
                 "vertex_location": location,
                 "image_path": image_path,
                 "reference_image_paths": reference_image_paths,
-                "model": ugc_model if reference_image_paths else None,
+                "model": ugc_model if reference_image_paths else standard_model,
                 "negative_prompt": neg_prompt,
             })
 
@@ -469,7 +470,7 @@ def run_ai_pipeline(job: Job, params: dict[str, Any]) -> None:
                     "vertex_location": location,
                     "image_path": image_path,
                     "reference_image_paths": reference_image_paths,
-                    "model": ugc_model if reference_image_paths else None,
+                    "model": ugc_model if reference_image_paths else standard_model,
                     "negative_prompt": neg_prompt,
                 })
                 if result.success:

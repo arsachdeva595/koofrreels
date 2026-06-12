@@ -470,9 +470,15 @@
         </div>
 
         <div class="field">
+          <label>Standard Veo Model <span style="color:#555">(AI Reels — Story / Character / No-Characters / Product)</span></label>
+          <input type="text" id="veo_standard_model" placeholder="veo-3.1-lite-generate-001" />
+          <div class="hint">The Veo model used to generate clips for all AI Reel types except UGC. Paste any model ID enabled in your Vertex project (e.g. <code>veo-3.1-lite-generate-001</code>, <code>veo-3.1-generate-001</code>). Use just the bare model ID — not the full <code>publishers/google/models/…</code> path.</div>
+        </div>
+
+        <div class="field">
           <label>UGC Reference Model <span style="color:#555">(for AI Reels → UGC only)</span></label>
           <input type="text" id="veo_reference_model" placeholder="veo-3.1-generate-001" />
-          <div class="hint">The reference-capable Veo&nbsp;3.1 model used for UGC (creator + product in one shot). Must be <strong>enabled in your Vertex project's Model Garden</strong>. Try <code>veo-3.1-generate-001</code>; if that 404s, open Model Garden, enable Veo&nbsp;3.1, and paste the exact model ID shown on its card. Other AI Reel types don't use this.</div>
+          <div class="hint">The reference-capable Veo&nbsp;3.1 model used for UGC (creator + product in one shot). Must be <strong>enabled in your Vertex project's Model Garden</strong>. Try <code>veo-3.1-generate-001</code>; if that 404s, open Model Garden, enable Veo&nbsp;3.1, and paste the exact model ID shown on its card. The Veo&nbsp;3.1 <em>lite</em> model does not support reference images.</div>
         </div>
 
         <button class="btn-save" onclick="saveApiKeys()">Save API Keys</button>
@@ -761,6 +767,7 @@ Short. 1-2 lines max. Example:
         setVal('vertex_project_id', settings.vertex_project_id || '');
         setVal('vertex_location', settings.vertex_location || 'us-central1');
         setVal('google_credentials_path', settings.google_credentials_path || '');
+        setVal('veo_standard_model', settings.veo_standard_model || '');
         setVal('veo_reference_model', settings.veo_reference_model || '');
 
         // Koofr tab
@@ -805,7 +812,7 @@ Short. 1-2 lines max. Example:
                       'elevenlabs_api_key', 'elevenlabs_voice_id',
                       'fal_api_key', 'wavespeed_api_key',
                       'vertex_project_id', 'vertex_location', 'google_credentials_path',
-                      'veo_reference_model'];
+                      'veo_standard_model', 'veo_reference_model'];
       fields.forEach(f => {
         const v = document.getElementById(f).value.trim();
         if (v && v !== '••••••••') body[f] = v;
