@@ -253,7 +253,6 @@ def run_ai_pipeline(job: Job, params: dict[str, Any]) -> None:
         job.begin_stage("voiceover", "Generating Voiceover", "Sending script to ElevenLabs...")
         job.update(progress_pct=20)
 
-        import os
         scene_vo_files: dict[int, str] = {}
         scene_vo_durations: dict[int, float] = {}
         if not params.get("include_voiceover", True):
