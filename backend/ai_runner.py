@@ -212,11 +212,18 @@ def run_ai_pipeline(job: Job, params: dict[str, Any]) -> None:
                 "Google credentials not configured — set google_credentials_path in Settings → API Keys → Google Cloud"
             )
 
-        # ── Product mode: read the product from its image (vision) ─────────────
+        # ── UGC mode needs both a creator image and a product image ────────────
+        if params.get("reel_type") == "ugc":
+            if not (params.get("character_image_path") and params.get("product_image_path")):
+                raise RuntimeError(
+                    "UGC mode needs BOTH a creator image and a product image — upload both in AI Reels → UGC."
+                )
+
+        # ── Product / UGC mode: read the product from its image (vision) ───────
         # The description is fed into the storyboard prompt so the script is built
         # around the actual product, not just the text prompt.
         product_image_path = params.get("product_image_path")
-        if params.get("reel_type") == "product" and product_image_path and Path(product_image_path).exists():
+        if params.get("reel_type") in ("product", "ugc") and product_image_path and Path(product_image_path).exists():
             try:
                 reel_brief["product_description"] = _describe_product(product_image_path)
                 job.update(message="Product analyzed from image")
@@ -416,7 +423,14 @@ def run_ai_pipeline(job: Job, params: dict[str, Any]) -> None:
             duration = min(int(scene.get("duration_seconds", 5)), VEO3_MAX_DURATION)
             dest_path = str(clips_dir / f"clip_{i:03d}_veo3.mp4")
 
-            if reel_type == "character" and character_image_path:
+            image_path = None
+            reference_image_paths = None
+            if reel_type == "ugc" and character_image_path and product_image_path:
+                # UGC: send BOTH the creator and the product as reference ("asset")
+                # images so Veo3 keeps them together — the model holding/showing the
+                # product — in every shot.
+                reference_image_paths = [character_image_path, product_image_path]
+            elif reel_type == "character" and character_image_path:
                 image_path = character_image_path
             elif reel_type == "story" and keyframe_paths:
                 image_path = keyframe_paths[i % len(keyframe_paths)]
@@ -424,8 +438,6 @@ def run_ai_pipeline(job: Job, params: dict[str, Any]) -> None:
                 # Product mode: anchor the product only on the scenes the storyboard
                 # flagged as showcase ("hero") scenes — others stay pure text-to-video.
                 image_path = product_image_path
-            else:
-                image_path = None
 
             neg_prompt = _VEO3_NO_SPEECH if vo_on else ""
 
@@ -437,6 +449,7 @@ def run_ai_pipeline(job: Job, params: dict[str, Any]) -> None:
                 "vertex_project_id": project_id_vx,
                 "vertex_location": location,
                 "image_path": image_path,
+                "reference_image_paths": reference_image_paths,
                 "negative_prompt": neg_prompt,
             })
 
@@ -452,6 +465,7 @@ def run_ai_pipeline(job: Job, params: dict[str, Any]) -> None:
                     "vertex_project_id": project_id_vx,
                     "vertex_location": location,
                     "image_path": image_path,
+                    "reference_image_paths": reference_image_paths,
                     "negative_prompt": neg_prompt,
                 })
                 if result.success:

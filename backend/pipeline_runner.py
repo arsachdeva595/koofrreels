@@ -634,6 +634,7 @@ Excitement → "person jumping, arms raised, bright open space"
     _is_ai_reels = reel_brief.get("mode") == "ai_reels"
     _no_characters = _is_ai_reels and reel_brief.get("reel_type") == "none"
     _is_product = _is_ai_reels and reel_brief.get("reel_type") == "product"
+    _is_ugc = _is_ai_reels and reel_brief.get("reel_type") == "ugc"
     _product_desc = reel_brief.get("product_description", "")
 
     _product_section = (f"""
@@ -647,6 +648,21 @@ The reel must sell/showcase this specific product:
 - For feature_product scenes, the visual_description should center the product (its look, use, detail).
 - Keep visual_description in English (Veo3 rule above).
 """) if _is_product else ""
+
+    _ugc_section = (f"""
+UGC MODE — AUTHENTIC CREATOR DEMO (a real person reviewing/showing the product):
+This is a user-generated-content style reel. ONE on-camera creator presents and demonstrates
+this product, talking to the camera like a genuine personal recommendation:
+  PRODUCT: {_product_desc or '(see the topic/prompt)'}
+- Write the voiceover as a FIRST-PERSON, casual, authentic creator monologue — never an ad
+  voiceover. Use natural spoken language ("okay so", "honestly", "wait — look at this").
+- The SAME creator appears in EVERY scene, holding / using / showing the product to camera.
+- Every visual_description MUST show the creator AND the product together — describe the person's
+  action with the product (e.g. "young woman holding the tan tote bag up to camera, smiling, casual
+  sunlit room"), the framing, and the vibe. Keep it natural and selfie/handheld in feel.
+- Mark product close-up / showcase beats "feature_product": true; talking-head beats "feature_product": false.
+- Keep visual_description in English (Veo3 rule above).
+""") if _is_ugc else ""
 
     _no_characters_section = """
 CRITICAL — NO CHARACTERS MODE (ZERO HUMANS ON SCREEN):
@@ -674,6 +690,7 @@ ENTIRELY through objects and scenery, with zero human presence in the generated 
         + (_google_policy_section if _is_ai_reels else "")
         + (_no_characters_section if _no_characters else "")
         + (_product_section if _is_product else "")
+        + (_ugc_section if _is_ugc else "")
         + "\nRespond ONLY with valid JSON — no markdown fences."
     )
 
@@ -692,7 +709,7 @@ ENTIRELY through objects and scenery, with zero human presence in the generated 
         f'"duration_seconds": {dur_per}, '
         '"overlay_text": "Punchy on-screen text max 8 words — front-load tension", '
         '"voiceover": "Spoken line — short sentences, say you, active voice, no brand name in hook/setup"'
-        + (', "feature_product": true' if _is_product else "")
+        + (', "feature_product": true' if (_is_product or _is_ugc) else "")
         + "}]}"
     )
 

@@ -33,15 +33,40 @@ from tools.base_tool import (
     ToolTier,
 )
 
-VEO3_ENDPOINT_TMPL = (
+# Default model — fast/cheap text- and first-frame-image-to-video.
+VEO3_MODEL = "veo-3.1-lite-generate-001"
+# Reference-capable model — supports referenceImages ("asset") so multiple subjects
+# (e.g. a creator AND a product) can be preserved in the same shot. Used by UGC mode.
+# NOTE: if your Vertex project has a different reference-capable Veo 3.1 model enabled,
+# change this ID (e.g. "veo-3.1-generate-001").
+VEO3_REFERENCE_MODEL = "veo-3.1-generate-preview"
+
+_ENDPOINT_TMPL = (
     "https://{location}-aiplatform.googleapis.com/v1/projects/{project}"
-    "/locations/{location}/publishers/google/models"
-    "/veo-3.1-lite-generate-001:predictLongRunning"
+    "/locations/{location}/publishers/google/models/{model}:{verb}"
 )
 OPERATIONS_BASE = "https://aiplatform.googleapis.com/v1"
 POLL_INTERVAL = 10   # seconds between status checks
 MAX_WAIT = 300       # 5 minutes per clip
 VEO3_MAX_DURATION = 8
+
+
+def _encode_asset_image(image_path: str) -> tuple[str, str]:
+    """Return (base64_bytes, mime_type) for a Veo reference image.
+    Reference images accept only image/jpeg and image/png — anything else
+    (webp, heic, etc.) is converted to JPEG."""
+    suffix = Path(image_path).suffix.lower().lstrip(".")
+    if suffix in ("jpg", "jpeg"):
+        return base64.b64encode(Path(image_path).read_bytes()).decode(), "image/jpeg"
+    if suffix == "png":
+        return base64.b64encode(Path(image_path).read_bytes()).decode(), "image/png"
+    # Convert anything else to JPEG
+    import io
+    from PIL import Image as _PImage
+    img = _PImage.open(image_path).convert("RGB")
+    buf = io.BytesIO()
+    img.save(buf, format="JPEG", quality=95)
+    return base64.b64encode(buf.getvalue()).decode(), "image/jpeg"
 
 
 class Veo3Client(BaseTool):
@@ -108,11 +133,21 @@ class Veo3Client(BaseTool):
         token: str,
         image_path: str | None = None,
         negative_prompt: str = "",
+        reference_image_paths: list[str] | None = None,
+        model: str = VEO3_MODEL,
     ) -> tuple[str | None, str | None]:
         """POST to Veo3 predictLongRunning. Returns (operation_name, error)."""
-        url = VEO3_ENDPOINT_TMPL.format(location=location, project=project_id)
+        url = _ENDPOINT_TMPL.format(location=location, project=project_id, model=model, verb="predictLongRunning")
         instance: dict = {"prompt": prompt}
-        if image_path:
+        if reference_image_paths:
+            # Reference ("asset") images — preserve multiple subjects (e.g. creator +
+            # product) in the same shot. Max 3 per Veo docs. JPEG/PNG only.
+            ref_imgs = []
+            for p in reference_image_paths[:3]:
+                b64, mime = _encode_asset_image(p)
+                ref_imgs.append({"image": {"bytesBase64Encoded": b64, "mimeType": mime}, "referenceType": "asset"})
+            instance["referenceImages"] = ref_imgs
+        elif image_path:
             suffix = Path(image_path).suffix.lower().lstrip(".")
             mime = {"jpg": "image/jpeg", "jpeg": "image/jpeg", "png": "image/png", "webp": "image/webp"}.get(suffix, "image/jpeg")
             instance["image"] = {
@@ -147,17 +182,14 @@ class Veo3Client(BaseTool):
         token: str,
         timeout: int = MAX_WAIT,
         interval: int = POLL_INTERVAL,
+        model: str = VEO3_MODEL,
     ) -> tuple[dict | None, str | None]:
         """Poll via fetchPredictOperation until done=True or timeout.
 
-        Per docs: POST .../veo-3.1-lite-generate-001:fetchPredictOperation
+        Per docs: POST .../<model>:fetchPredictOperation
         with body {"operationName": "<full operation name>"}
         """
-        url = (
-            f"https://{location}-aiplatform.googleapis.com/v1/projects/{project_id}"
-            f"/locations/{location}/publishers/google/models"
-            f"/veo-3.1-lite-generate-001:fetchPredictOperation"
-        )
+        url = _ENDPOINT_TMPL.format(location=location, project=project_id, model=model, verb="fetchPredictOperation")
         deadline = time.time() + timeout
         while time.time() < deadline:
             time.sleep(interval)
@@ -210,8 +242,10 @@ class Veo3Client(BaseTool):
           dest_path           str        local path to save the .mp4
           vertex_project_id   str        GCP project ID
           vertex_location     str        Vertex AI region (e.g. "us-central1")
-          image_path          str|None   optional reference/keyframe image path
+          image_path          str|None   optional reference/keyframe image path (first frame)
           negative_prompt     str        optional content to exclude (e.g. speech)
+          reference_image_paths list|None optional asset images (e.g. creator + product)
+                                          preserved together in the shot (UGC mode)
         """
         prompt = params.get("prompt", "")
         dest_path = params["dest_path"]
@@ -219,6 +253,9 @@ class Veo3Client(BaseTool):
         location = params.get("vertex_location", "us-central1")
         image_path = params.get("image_path")
         negative_prompt = params.get("negative_prompt", "")
+        reference_image_paths = params.get("reference_image_paths") or None
+        # Reference images require the reference-capable model; otherwise use the default.
+        model = params.get("model") or (VEO3_REFERENCE_MODEL if reference_image_paths else VEO3_MODEL)
 
         if not project_id:
             return ToolResult(success=False, error="vertex_project_id not provided")
@@ -232,11 +269,14 @@ class Veo3Client(BaseTool):
         if err:
             return ToolResult(success=False, error=err)
 
-        op_name, err = self._submit_generation(project_id, location, prompt, token, image_path, negative_prompt)
+        op_name, err = self._submit_generation(
+            project_id, location, prompt, token, image_path, negative_prompt,
+            reference_image_paths=reference_image_paths, model=model,
+        )
         if err:
             return ToolResult(success=False, error=err)
 
-        op_response, err = self._fetch_operation(op_name, project_id, location, token)
+        op_response, err = self._fetch_operation(op_name, project_id, location, token, model=model)
         if err:
             return ToolResult(success=False, error=f"{err} [op={op_name}]")
 

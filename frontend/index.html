@@ -1209,6 +1209,7 @@
         <button class="source-pill" id="ai-rpill-character" onclick="switchAIReelType('character')">🎭 Character Driven</button>
         <button class="source-pill" id="ai-rpill-none" onclick="switchAIReelType('none')">🚫 No Characters</button>
         <button class="source-pill" id="ai-rpill-product" onclick="switchAIReelType('product')">🛍️ Product</button>
+        <button class="source-pill" id="ai-rpill-ugc" onclick="switchAIReelType('ugc')">🗣️ UGC</button>
       </div>
     </div>
 
@@ -1254,6 +1255,31 @@
         <img id="ai-product-preview" style="display:none;max-height:120px;border-radius:6px;margin-top:8px" />
       </div>
       <input type="file" id="ai-product-input" accept="image/*" style="display:none" onchange="handleAIProductUpload(this)" />
+    </div>
+
+    <!-- UGC-driven: creator image + product image -->
+    <div id="ai-panel-ugc" style="display:none">
+      <div class="source-hint" style="margin-bottom:12px">
+        Upload a <strong>creator</strong> (the person on camera) and a <strong>product</strong>. The creator demos the product like a real UGC review — both appear together in every shot.
+      </div>
+      <div style="display:flex;gap:12px;flex-wrap:wrap">
+        <div style="flex:1;min-width:200px">
+          <div class="section-label" style="margin-bottom:8px">🧑 Creator Image</div>
+          <div id="ai-ugc-creator-drop" style="border:2px dashed #444;border-radius:8px;padding:16px;text-align:center;cursor:pointer;min-height:80px;display:flex;align-items:center;justify-content:center;flex-direction:column" onclick="document.getElementById('ai-ugc-creator-input').click()">
+            <span id="ai-ugc-creator-drop-label" style="color:#888;font-size:13px">Click to upload creator</span>
+            <img id="ai-ugc-creator-preview" style="display:none;max-height:110px;border-radius:6px;margin-top:8px" />
+          </div>
+          <input type="file" id="ai-ugc-creator-input" accept="image/*" style="display:none" onchange="handleUGCCreatorUpload(this)" />
+        </div>
+        <div style="flex:1;min-width:200px">
+          <div class="section-label" style="margin-bottom:8px">🛍️ Product Image</div>
+          <div id="ai-ugc-product-drop" style="border:2px dashed #444;border-radius:8px;padding:16px;text-align:center;cursor:pointer;min-height:80px;display:flex;align-items:center;justify-content:center;flex-direction:column" onclick="document.getElementById('ai-ugc-product-input').click()">
+            <span id="ai-ugc-product-drop-label" style="color:#888;font-size:13px">Click to upload product</span>
+            <img id="ai-ugc-product-preview" style="display:none;max-height:110px;border-radius:6px;margin-top:8px" />
+          </div>
+          <input type="file" id="ai-ugc-product-input" accept="image/*" style="display:none" onchange="handleUGCProductUpload(this)" />
+        </div>
+      </div>
     </div>
 
     <hr class="divider" />
@@ -2864,7 +2890,7 @@
 
   function switchAIReelType(type) {
     aiReelType = type;
-    ['story', 'character', 'none', 'product'].forEach(t => {
+    ['story', 'character', 'none', 'product', 'ugc'].forEach(t => {
       document.getElementById('ai-rpill-' + t).classList.toggle('active', t === type);
       document.getElementById('ai-panel-' + t).style.display = t === type ? '' : 'none';
     });
@@ -2944,6 +2970,38 @@
     } catch(e) { showModuleError('ai', e.message); }
   }
 
+  async function handleUGCCreatorUpload(input) {
+    const file = input.files[0];
+    if (!file) return;
+    try {
+      const fd = new FormData(); fd.append('file', file);
+      const r = await fetch(`${API}/api/ai/upload-image`, {method: 'POST', body: fd});
+      if (!r.ok) throw new Error('Upload failed');
+      const {path} = await r.json();
+      aiCharImagePath = path;
+      const preview = document.getElementById('ai-ugc-creator-preview');
+      preview.src = URL.createObjectURL(file);
+      preview.style.display = '';
+      document.getElementById('ai-ugc-creator-drop-label').style.display = 'none';
+    } catch(e) { showModuleError('ai', e.message); }
+  }
+
+  async function handleUGCProductUpload(input) {
+    const file = input.files[0];
+    if (!file) return;
+    try {
+      const fd = new FormData(); fd.append('file', file);
+      const r = await fetch(`${API}/api/ai/upload-image`, {method: 'POST', body: fd});
+      if (!r.ok) throw new Error('Upload failed');
+      const {path} = await r.json();
+      aiProductImagePath = path;
+      const preview = document.getElementById('ai-ugc-product-preview');
+      preview.src = URL.createObjectURL(file);
+      preview.style.display = '';
+      document.getElementById('ai-ugc-product-drop-label').style.display = 'none';
+    } catch(e) { showModuleError('ai', e.message); }
+  }
+
   function toggleAISkipStoryboard(on) {
     const label = document.getElementById('ai-prompt-label');
     const sub = document.getElementById('ai-prompt-sub');
@@ -2991,8 +3049,8 @@
       text_hints: aiPrompt || null,
       reel_type: aiReelType,
       framework: document.getElementById('ai-framework').value,
-      character_image_path: aiReelType === 'character' ? aiCharImagePath : null,
-      product_image_path: aiReelType === 'product' ? aiProductImagePath : null,
+      character_image_path: (aiReelType === 'character' || aiReelType === 'ugc') ? aiCharImagePath : null,
+      product_image_path: (aiReelType === 'product' || aiReelType === 'ugc') ? aiProductImagePath : null,
       keyframe_paths: aiReelType === 'story' && aiKeyframePaths.length ? aiKeyframePaths : null,
       skip_storyboard: document.getElementById('ai-skip-storyboard').checked,
       skip_edit_planner: document.getElementById('ai-skip-edit-planner').checked,
