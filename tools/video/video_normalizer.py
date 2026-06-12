@@ -75,7 +75,7 @@ class VideoNormalizer(BaseTool):
             f"[bg][fg]overlay=0:0,setsar=1[out]"
         )
 
-        cmd = ["ffmpeg", "-y"]
+        cmd = ["ffmpeg", "-nostdin", "-y"]
 
         # Seek before -i for fast, accurate trimming via re-encode
         if trim_in is not None and trim_in > 0:
@@ -104,7 +104,7 @@ class VideoNormalizer(BaseTool):
             output_path,
         ]
 
-        result = subprocess.run(cmd, capture_output=True, text=True, timeout=1200)
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=300, stdin=subprocess.DEVNULL)
         if result.returncode != 0:
             return ToolResult(success=False, error=result.stderr[-1000:])
 

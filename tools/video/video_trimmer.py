@@ -49,14 +49,14 @@ class VideoTrimmer(BaseTool):
         Path(output_path).parent.mkdir(parents=True, exist_ok=True)
 
         cmd = [
-            "ffmpeg", "-y",
+            "ffmpeg", "-nostdin", "-y",
             "-ss", str(trim_in),
             "-i", input_path,
             "-t", str(duration),
             "-c", "copy",
             output_path,
         ]
-        result = subprocess.run(cmd, capture_output=True, text=True, timeout=120)
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=120, stdin=subprocess.DEVNULL)
         if result.returncode != 0:
             return ToolResult(success=False, error=result.stderr[-800:])
 

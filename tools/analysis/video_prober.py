@@ -40,7 +40,7 @@ class VideoProber(BaseTool):
             "-show_streams", "-show_format", path,
         ]
         try:
-            out = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
+            out = subprocess.run(cmd, capture_output=True, text=True, timeout=30, stdin=subprocess.DEVNULL)
             if out.returncode != 0:
                 return ToolResult(success=False, error=f"ffprobe failed: {out.stderr}")
             probe = json.loads(out.stdout)

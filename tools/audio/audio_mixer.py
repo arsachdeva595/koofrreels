@@ -105,7 +105,7 @@ class AudioMixer(BaseTool):
             )
 
         cmd = [
-            "ffmpeg", "-y",
+            "ffmpeg", "-nostdin", "-y",
             *inputs,
             "-filter_complex", filter_complex,
             "-map", "0:v",
@@ -116,7 +116,7 @@ class AudioMixer(BaseTool):
             "-t", str(dur),
             output_path,
         ]
-        result = subprocess.run(cmd, capture_output=True, text=True, timeout=600)
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=600, stdin=subprocess.DEVNULL)
         if result.returncode != 0:
             return ToolResult(success=False, error=result.stderr[-600:])
 
@@ -135,7 +135,7 @@ class AudioMixer(BaseTool):
         r = subprocess.run(
             ["ffprobe", "-v", "quiet", "-show_entries", "format=duration",
              "-of", "default=noprint_wrappers=1:nokey=1", path],
-            capture_output=True, text=True,
+            capture_output=True, text=True, stdin=subprocess.DEVNULL,
         )
         try:
             return float(r.stdout.strip())
@@ -148,6 +148,6 @@ class AudioMixer(BaseTool):
             ["ffprobe", "-v", "quiet", "-select_streams", "a",
              "-show_entries", "stream=codec_type",
              "-of", "default=noprint_wrappers=1:nokey=1", path],
-            capture_output=True, text=True,
+            capture_output=True, text=True, stdin=subprocess.DEVNULL,
         )
         return bool(r.stdout.strip())

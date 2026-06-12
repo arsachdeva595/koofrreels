@@ -52,7 +52,7 @@ class FrameSampler(BaseTool):
                 "ffprobe", "-v", "quiet", "-show_entries", "format=duration",
                 "-of", "default=noprint_wrappers=1:nokey=1", video_path,
             ]
-            out = subprocess.run(duration_cmd, capture_output=True, text=True)
+            out = subprocess.run(duration_cmd, capture_output=True, text=True, stdin=subprocess.DEVNULL)
             try:
                 duration = float(out.stdout.strip())
             except ValueError:
@@ -64,10 +64,10 @@ class FrameSampler(BaseTool):
         for i, ts in enumerate(timestamps):
             out_path = output_dir / f"frame_{i:03d}_{ts:.1f}s.jpg"
             cmd = [
-                "ffmpeg", "-y", "-ss", str(ts), "-i", video_path,
+                "ffmpeg", "-nostdin", "-y", "-ss", str(ts), "-i", video_path,
                 "-frames:v", "1", "-q:v", "2", str(out_path),
             ]
-            result = subprocess.run(cmd, capture_output=True, timeout=30)
+            result = subprocess.run(cmd, capture_output=True, timeout=30, stdin=subprocess.DEVNULL)
             if result.returncode == 0 and out_path.exists():
                 frame_paths.append({"timestamp_seconds": ts, "path": str(out_path)})
 

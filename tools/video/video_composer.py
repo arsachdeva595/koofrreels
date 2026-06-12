@@ -69,8 +69,8 @@ class VideoComposer(BaseTool):
         return self._concat_stream_copy(clips, output_path)
 
     def _single_clip(self, path: str, output_path: str) -> ToolResult:
-        cmd = ["ffmpeg", "-y", "-i", path, "-c", "copy", output_path]
-        result = subprocess.run(cmd, capture_output=True, text=True, timeout=300)
+        cmd = ["ffmpeg", "-nostdin", "-y", "-i", path, "-c", "copy", output_path]
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=300, stdin=subprocess.DEVNULL)
         if result.returncode != 0:
             return ToolResult(success=False, error=result.stderr[-500:])
         return ToolResult(success=True, data={"output_path": output_path})
@@ -84,12 +84,12 @@ class VideoComposer(BaseTool):
         )
 
         cmd = [
-            "ffmpeg", "-y", "-f", "concat", "-safe", "0",
+            "ffmpeg", "-nostdin", "-y", "-f", "concat", "-safe", "0",
             "-i", str(list_path),
             "-c", "copy",
             output_path,
         ]
-        result = subprocess.run(cmd, capture_output=True, text=True, timeout=600)
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=600, stdin=subprocess.DEVNULL)
         list_path.unlink(missing_ok=True)
 
         if result.returncode == 0:
@@ -110,7 +110,7 @@ class VideoComposer(BaseTool):
         )
 
         base = [
-            "ffmpeg", "-y",
+            "ffmpeg", "-nostdin", "-y",
             *inputs,
             "-filter_complex", filter_complex,
             "-map", "[vout]",
@@ -119,12 +119,12 @@ class VideoComposer(BaseTool):
         tail = ["-c:a", "aac", "-b:a", "128k", output_path]
 
         hw_cmd = base + ["-c:v", "h264_videotoolbox", "-q:v", "55"] + tail
-        result = subprocess.run(hw_cmd, capture_output=True, text=True, timeout=1800)
+        result = subprocess.run(hw_cmd, capture_output=True, text=True, timeout=1800, stdin=subprocess.DEVNULL)
         if result.returncode == 0:
             return ToolResult(success=True, data={"output_path": output_path})
 
         sw_cmd = base + ["-c:v", "libx264", "-preset", "ultrafast", "-crf", "23"] + tail
-        result = subprocess.run(sw_cmd, capture_output=True, text=True, timeout=1800)
+        result = subprocess.run(sw_cmd, capture_output=True, text=True, timeout=1800, stdin=subprocess.DEVNULL)
         if result.returncode != 0:
             return ToolResult(success=False, error=result.stderr[-800:])
         return ToolResult(success=True, data={"output_path": output_path})

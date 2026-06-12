@@ -41,7 +41,7 @@ class AudioProber(BaseTool):
             "-show_streams", "-select_streams", "a", path,
         ]
         try:
-            out = subprocess.run(probe_cmd, capture_output=True, text=True, timeout=30)
+            out = subprocess.run(probe_cmd, capture_output=True, text=True, timeout=30, stdin=subprocess.DEVNULL)
             probe = json.loads(out.stdout) if out.returncode == 0 else {"streams": []}
         except Exception:
             probe = {"streams": []}
@@ -53,7 +53,7 @@ class AudioProber(BaseTool):
             "ffmpeg", "-i", path, "-af", "volumedetect", "-f", "null", "/dev/null",
         ]
         try:
-            vol_out = subprocess.run(volume_cmd, capture_output=True, text=True, timeout=60)
+            vol_out = subprocess.run(volume_cmd, capture_output=True, text=True, timeout=60, stdin=subprocess.DEVNULL)
             stderr = vol_out.stderr
             mean_volume = None
             max_volume = None

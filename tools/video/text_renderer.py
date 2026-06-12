@@ -95,8 +95,8 @@ class TextRenderer(BaseTool):
                 scenes.append({"text": caption, "start": 0, "end": 99999, "position": "bottom"})
 
         if not scenes:
-            cmd = ["ffmpeg", "-y", "-i", input_path, "-c", "copy", output_path]
-            r = subprocess.run(cmd, capture_output=True, text=True, timeout=300)
+            cmd = ["ffmpeg", "-nostdin", "-y", "-i", input_path, "-c", "copy", output_path]
+            r = subprocess.run(cmd, capture_output=True, text=True, timeout=300, stdin=subprocess.DEVNULL)
             if r.returncode != 0:
                 return ToolResult(success=False, error=r.stderr[-500:])
             return ToolResult(success=True, data={"output_path": output_path})
@@ -144,8 +144,8 @@ class TextRenderer(BaseTool):
                 )
 
             if not filters:
-                cmd = ["ffmpeg", "-y", "-i", input_path, "-c", "copy", output_path]
-                r = subprocess.run(cmd, capture_output=True, text=True, timeout=300)
+                cmd = ["ffmpeg", "-nostdin", "-y", "-i", input_path, "-c", "copy", output_path]
+                r = subprocess.run(cmd, capture_output=True, text=True, timeout=300, stdin=subprocess.DEVNULL)
                 if r.returncode != 0:
                     return ToolResult(success=False, error=r.stderr[-500:])
                 return ToolResult(success=True, data={"output_path": output_path})
@@ -157,13 +157,13 @@ class TextRenderer(BaseTool):
                 ["-c:v", "libx264", "-preset", "fast", "-crf", "23"],
             ]:
                 cmd = [
-                    "ffmpeg", "-y", "-i", input_path,
+                    "ffmpeg", "-nostdin", "-y", "-i", input_path,
                     "-vf", vf,
                     *enc,
                     "-c:a", "copy",
                     output_path,
                 ]
-                r = subprocess.run(cmd, capture_output=True, text=True, timeout=1200)
+                r = subprocess.run(cmd, capture_output=True, text=True, timeout=1200, stdin=subprocess.DEVNULL)
                 if r.returncode == 0:
                     return ToolResult(success=True, data={"output_path": output_path})
 
