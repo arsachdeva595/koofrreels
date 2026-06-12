@@ -1194,6 +1194,7 @@
       <div class="source-pills">
         <button class="source-pill active" id="ai-rpill-story" onclick="switchAIReelType('story')">📖 Story Driven</button>
         <button class="source-pill" id="ai-rpill-character" onclick="switchAIReelType('character')">🎭 Character Driven</button>
+        <button class="source-pill" id="ai-rpill-none" onclick="switchAIReelType('none')">🚫 No Characters</button>
       </div>
     </div>
 
@@ -1219,6 +1220,13 @@
         <img id="ai-char-preview" style="display:none;max-height:120px;border-radius:6px;margin-top:8px" />
       </div>
       <input type="file" id="ai-char-input" accept="image/*" style="display:none" onchange="handleAICharUpload(this)" />
+    </div>
+
+    <!-- No-characters: object/scenery only, no uploads -->
+    <div id="ai-panel-none" style="display:none">
+      <div class="source-hint">
+        Every scene is generated with <strong>zero people on screen</strong> — only objects, environments, textures, and the subject itself. The story is told through visuals and camera movement, never a human figure.
+      </div>
     </div>
 
     <hr class="divider" />
@@ -2828,7 +2836,7 @@
 
   function switchAIReelType(type) {
     aiReelType = type;
-    ['story', 'character'].forEach(t => {
+    ['story', 'character', 'none'].forEach(t => {
       document.getElementById('ai-rpill-' + t).classList.toggle('active', t === type);
       document.getElementById('ai-panel-' + t).style.display = t === type ? '' : 'none';
     });

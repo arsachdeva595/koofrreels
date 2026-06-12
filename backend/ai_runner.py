@@ -164,6 +164,7 @@ def run_ai_pipeline(job: Job, params: dict[str, Any]) -> None:
             "include_text": params.get("include_text", True),
             "use_brand_guidelines": params.get("use_brand_guidelines", True),
             "text_hints": params.get("text_hints"),
+            "reel_type": params.get("reel_type", "story"),
         }
 
         if not settings_manager.get("vertex_project_id", ""):

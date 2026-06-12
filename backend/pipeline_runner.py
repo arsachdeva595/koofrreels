@@ -529,6 +529,21 @@ Excitement → "person jumping, arms raised, bright open space"
 """
 
     _is_ai_reels = reel_brief.get("mode") == "ai_reels"
+    _no_characters = _is_ai_reels and reel_brief.get("reel_type") == "none"
+
+    _no_characters_section = """
+CRITICAL — NO CHARACTERS MODE (ZERO HUMANS ON SCREEN):
+This reel must contain NO people, humans, characters, faces, hands, or body parts in ANY scene.
+Every visual_description and clip_hint MUST describe ONLY: objects, products, environments, landscapes,
+textures, close-ups of materials, nature, light, still life, abstract motion, or the subject itself.
+- NEVER write: person, people, woman, man, girl, boy, hand, hands, finger, figure, someone, model,
+  character, crowd, face, portrait, he, she, they.
+- Replace every human action with object or environment motion. Instead of "a woman painting sunflowers",
+  write "a brush gliding across canvas, yellow paint blooming into sunflower petals under warm light".
+- Convey emotion through lighting, color, weather, camera movement, and the subject — never through a person.
+This overrides any human-centric guidance above. The ABT retention structure still applies, but it is told
+ENTIRELY through objects and scenery, with zero human presence in the generated visuals.
+"""
 
     system = """You are an expert Instagram Reels scriptwriter. You write scripts for RETENTION, not just views.
 
@@ -564,13 +579,15 @@ SCENE ROLES to use:
 - "but" — 8–18s, the open loop, the contradiction, the real problem (must feel genuinely surprising)
 - "therefore" — 18–27s, the payoff/resolution, product enters here as the earned solution
 - "trigger" — 27–30s, CTA or micro-revelation that triggers shares ("most people don't know this part…")
-""" + (_google_policy_section if _is_ai_reels else "") + """
+""" + (_google_policy_section if _is_ai_reels else "") + (_no_characters_section if _no_characters else "") + """
 Respond ONLY with valid JSON — no markdown fences."""
 
     user = (
         f"Write a {n_scenes}-scene ABT-structured storyboard for this Instagram Reel.\n"
         f"Topic/prompt: {prompt}{context}\n"
-        f"Total duration: {target_dur}s (~{dur_per}s per scene)\n\n"
+        + ("REMINDER: NO CHARACTERS MODE is active — every visual_description and clip_hint must show "
+           "ZERO humans/people. Describe only objects, scenery, textures, and the subject.\n" if _no_characters else "")
+        + f"Total duration: {target_dur}s (~{dur_per}s per scene)\n\n"
         "Map scenes to ABT roles (hook → and → but → therefore → trigger). "
         "For shorter reels compress: hook+and in scene 1, but in scene 2, therefore+trigger in final scene.\n\n"
         'Return JSON: {"theme": "one-line theme", "scenes": [{'
