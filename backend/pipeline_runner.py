@@ -633,6 +633,20 @@ Excitement → "person jumping, arms raised, bright open space"
 
     _is_ai_reels = reel_brief.get("mode") == "ai_reels"
     _no_characters = _is_ai_reels and reel_brief.get("reel_type") == "none"
+    _is_product = _is_ai_reels and reel_brief.get("reel_type") == "product"
+    _product_desc = reel_brief.get("product_description", "")
+
+    _product_section = (f"""
+PRODUCT MODE — BUILD THE STORY AROUND THIS PRODUCT:
+The reel must sell/showcase this specific product:
+  {_product_desc or '(see the topic/prompt)'}
+- Weave the product naturally into the narrative arc of the chosen framework — it is the payoff/solution.
+- Mark the scenes that visually showcase the product with "feature_product": true (typically the
+  resolution/payoff and 1–2 hero shots). Mark setup/tension scenes that do NOT show the product
+  "feature_product": false.
+- For feature_product scenes, the visual_description should center the product (its look, use, detail).
+- Keep visual_description in English (Veo3 rule above).
+""") if _is_product else ""
 
     _no_characters_section = """
 CRITICAL — NO CHARACTERS MODE (ZERO HUMANS ON SCREEN):
@@ -659,6 +673,7 @@ ENTIRELY through objects and scenery, with zero human presence in the generated 
         + fw["roles_block"] + "\n"
         + (_google_policy_section if _is_ai_reels else "")
         + (_no_characters_section if _no_characters else "")
+        + (_product_section if _is_product else "")
         + "\nRespond ONLY with valid JSON — no markdown fences."
     )
 
@@ -677,7 +692,8 @@ ENTIRELY through objects and scenery, with zero human presence in the generated 
         f'"duration_seconds": {dur_per}, '
         '"overlay_text": "Punchy on-screen text max 8 words — front-load tension", '
         '"voiceover": "Spoken line — short sentences, say you, active voice, no brand name in hook/setup"'
-        "}]}"
+        + (', "feature_product": true' if _is_product else "")
+        + "}]}"
     )
 
     client = anthropic.Anthropic(api_key=api_key)

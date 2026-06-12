@@ -472,8 +472,9 @@ class AIGenerateRequest(BaseModel):
     include_voiceover: bool = True
     use_brand_guidelines: bool = True
     text_hints: str | None = None
-    reel_type: str = "story"                      # "story" | "character"
+    reel_type: str = "story"                      # "story" | "character" | "none" | "product"
     character_image_path: str | None = None
+    product_image_path: str | None = None         # product mode — anchors hero scenes
     keyframe_paths: list[str] | None = None
     skip_storyboard: bool = False                 # use prompt as raw scene script, skip Claude
     skip_edit_planner: bool = False               # use clips as-is, skip cut planning

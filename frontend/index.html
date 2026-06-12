@@ -1207,6 +1207,7 @@
         <button class="source-pill active" id="ai-rpill-story" onclick="switchAIReelType('story')">📖 Story Driven</button>
         <button class="source-pill" id="ai-rpill-character" onclick="switchAIReelType('character')">🎭 Character Driven</button>
         <button class="source-pill" id="ai-rpill-none" onclick="switchAIReelType('none')">🚫 No Characters</button>
+        <button class="source-pill" id="ai-rpill-product" onclick="switchAIReelType('product')">🛍️ Product</button>
       </div>
     </div>
 
@@ -1239,6 +1240,19 @@
       <div class="source-hint">
         Every scene is generated with <strong>zero people on screen</strong> — only objects, environments, textures, and the subject itself. The story is told through visuals and camera movement, never a human figure.
       </div>
+    </div>
+
+    <!-- Product-driven: single product image -->
+    <div id="ai-panel-product" style="display:none">
+      <div class="section-label" style="margin-bottom:8px">Product Image</div>
+      <div class="source-hint" style="margin-bottom:10px">
+        Claude reads your product from the image and builds the storyline around it. The product appears in the key showcase scenes.
+      </div>
+      <div id="ai-product-drop" style="border:2px dashed #444;border-radius:8px;padding:16px;text-align:center;cursor:pointer;min-height:80px;display:flex;align-items:center;justify-content:center;flex-direction:column" onclick="document.getElementById('ai-product-input').click()">
+        <span id="ai-product-drop-label" style="color:#888;font-size:13px">Click to upload product image</span>
+        <img id="ai-product-preview" style="display:none;max-height:120px;border-radius:6px;margin-top:8px" />
+      </div>
+      <input type="file" id="ai-product-input" accept="image/*" style="display:none" onchange="handleAIProductUpload(this)" />
     </div>
 
     <hr class="divider" />
@@ -2845,10 +2859,11 @@
   let aiReelType = 'story';
   let aiKeyframePaths = [];
   let aiCharImagePath = null;
+  let aiProductImagePath = null;
 
   function switchAIReelType(type) {
     aiReelType = type;
-    ['story', 'character', 'none'].forEach(t => {
+    ['story', 'character', 'none', 'product'].forEach(t => {
       document.getElementById('ai-rpill-' + t).classList.toggle('active', t === type);
       document.getElementById('ai-panel-' + t).style.display = t === type ? '' : 'none';
     });
@@ -2912,6 +2927,22 @@
     } catch(e) { showModuleError('ai', e.message); }
   }
 
+  async function handleAIProductUpload(input) {
+    const file = input.files[0];
+    if (!file) return;
+    try {
+      const fd = new FormData(); fd.append('file', file);
+      const r = await fetch(`${API}/api/ai/upload-image`, {method: 'POST', body: fd});
+      if (!r.ok) throw new Error('Upload failed');
+      const {path} = await r.json();
+      aiProductImagePath = path;
+      const preview = document.getElementById('ai-product-preview');
+      preview.src = URL.createObjectURL(file);
+      preview.style.display = '';
+      document.getElementById('ai-product-drop-label').style.display = 'none';
+    } catch(e) { showModuleError('ai', e.message); }
+  }
+
   function toggleAISkipStoryboard(on) {
     const label = document.getElementById('ai-prompt-label');
     const sub = document.getElementById('ai-prompt-sub');
@@ -2960,6 +2991,7 @@
       reel_type: aiReelType,
       framework: document.getElementById('ai-framework').value,
       character_image_path: aiReelType === 'character' ? aiCharImagePath : null,
+      product_image_path: aiReelType === 'product' ? aiProductImagePath : null,
       keyframe_paths: aiReelType === 'story' && aiKeyframePaths.length ? aiKeyframePaths : null,
       skip_storyboard: document.getElementById('ai-skip-storyboard').checked,
       skip_edit_planner: document.getElementById('ai-skip-edit-planner').checked,

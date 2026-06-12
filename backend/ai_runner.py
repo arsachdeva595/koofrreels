@@ -139,6 +139,33 @@ def _parse_script_to_storyboard(script: str) -> dict:
     }
 
 
+def _describe_product(image_path: str) -> str:
+    """One Claude vision call → a short factual description of the product in the image,
+    used to make the storyboard product-aware (Product mode)."""
+    import base64
+    import anthropic
+
+    api_key = os.getenv("ANTHROPIC_API_KEY", "") or settings_manager.get("anthropic_api_key", "")
+    if not api_key:
+        return ""
+    suffix = Path(image_path).suffix.lower().lstrip(".")
+    media_type = {"jpg": "image/jpeg", "jpeg": "image/jpeg", "png": "image/png", "webp": "image/webp"}.get(suffix, "image/jpeg")
+    data = base64.standard_b64encode(Path(image_path).read_bytes()).decode()
+    resp = anthropic.Anthropic(api_key=api_key).messages.create(
+        model="claude-sonnet-4-6",
+        max_tokens=200,
+        messages=[{"role": "user", "content": [
+            {"type": "image", "source": {"type": "base64", "media_type": media_type, "data": data}},
+            {"type": "text", "text": (
+                "Describe this product in 1-2 sentences for a video scriptwriter. "
+                "State exactly what it is, its key visual features (color, material, shape, style), "
+                "and the vibe it conveys. Be concrete and factual. Return only the description."
+            )},
+        ]}],
+    )
+    return resp.content[0].text.strip()
+
+
 def run_ai_pipeline(job: Job, params: dict[str, Any]) -> None:
     project_id = f"ai-{uuid.uuid4().hex[:8]}"
     project_dir = (PROJECTS_DIR / project_id).resolve()
@@ -166,6 +193,7 @@ def run_ai_pipeline(job: Job, params: dict[str, Any]) -> None:
             "text_hints": params.get("text_hints"),
             "reel_type": params.get("reel_type", "story"),
             "framework": params.get("framework", "abt"),
+            "product_image_path": params.get("product_image_path"),
         }
 
         if not settings_manager.get("vertex_project_id", ""):
@@ -183,6 +211,17 @@ def run_ai_pipeline(job: Job, params: dict[str, Any]) -> None:
             raise RuntimeError(
                 "Google credentials not configured — set google_credentials_path in Settings → API Keys → Google Cloud"
             )
+
+        # ── Product mode: read the product from its image (vision) ─────────────
+        # The description is fed into the storyboard prompt so the script is built
+        # around the actual product, not just the text prompt.
+        product_image_path = params.get("product_image_path")
+        if params.get("reel_type") == "product" and product_image_path and Path(product_image_path).exists():
+            try:
+                reel_brief["product_description"] = _describe_product(product_image_path)
+                job.update(message="Product analyzed from image")
+            except Exception as _exc:
+                job.update(message=f"Product image analysis skipped ({_exc})")
 
         job.end_stage("brief", "Brief ready")
 
@@ -381,6 +420,10 @@ def run_ai_pipeline(job: Job, params: dict[str, Any]) -> None:
                 image_path = character_image_path
             elif reel_type == "story" and keyframe_paths:
                 image_path = keyframe_paths[i % len(keyframe_paths)]
+            elif reel_type == "product" and product_image_path and scene.get("feature_product"):
+                # Product mode: anchor the product only on the scenes the storyboard
+                # flagged as showcase ("hero") scenes — others stay pure text-to-video.
+                image_path = product_image_path
             else:
                 image_path = None
 
@@ -476,10 +519,17 @@ def run_ai_pipeline(job: Job, params: dict[str, Any]) -> None:
 
         target_dur = reel_brief["target_duration_seconds"]
 
+        # Product mode: scenes whose first frame is the static product still — trim
+        # those like character mode so the still frame Veo3 puts at position 0 is hidden.
+        product_scene_nums: set = set()
+        if reel_type == "product" and product_image_path:
+            product_scene_nums = {s["scene"] for s in scenes if s.get("feature_product")}
+
         if params.get("skip_edit_planner"):
             cuts = []
             for i, clip in enumerate(clip_manifest["clips"]):
-                trim_in = CHARACTER_TRIM if reel_type == "character" else 0.0
+                _is_product_hero = reel_type == "product" and clip.get("scene") in product_scene_nums
+                trim_in = CHARACTER_TRIM if (reel_type == "character" or _is_product_hero) else 0.0
                 trim_out = round(clip["duration_seconds"], 3)
                 if trim_out <= trim_in:
                     trim_out = round(min(trim_in + 3.0, clip["duration_seconds"]), 3)
@@ -514,6 +564,13 @@ def run_ai_pipeline(job: Job, params: dict[str, Any]) -> None:
                     new_in = cut["trim_in"] + CHARACTER_TRIM
                     if new_in < cut["trim_out"] - 0.5:
                         cut["trim_in"] = round(new_in, 3)
+            # Product mode: same trim, but only on the product-conditioned hero scenes.
+            elif reel_type == "product" and product_scene_nums:
+                for cut in edit_decisions["cuts"]:
+                    if cut.get("scene") in product_scene_nums:
+                        new_in = cut["trim_in"] + CHARACTER_TRIM
+                        if new_in < cut["trim_out"] - 0.5:
+                            cut["trim_in"] = round(new_in, 3)
 
             abt_timing = edit_decisions.get("abt_timing", {})
             abt_desc = ", ".join(f"{r}@{t}s" for r, t in abt_timing.items()) if abt_timing else ""
