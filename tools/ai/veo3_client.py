@@ -39,7 +39,7 @@ VEO3_MODEL = "veo-3.1-lite-generate-001"
 # (e.g. a creator AND a product) can be preserved in the same shot. Used by UGC mode.
 # NOTE: if your Vertex project has a different reference-capable Veo 3.1 model enabled,
 # change this ID (e.g. "veo-3.1-generate-001").
-VEO3_REFERENCE_MODEL = "veo-3.1-generate-preview"
+VEO3_REFERENCE_MODEL = "veo-3.1-generate-001"
 
 _ENDPOINT_TMPL = (
     "https://{location}-aiplatform.googleapis.com/v1/projects/{project}"

@@ -137,6 +137,7 @@ class SettingsUpdate(BaseModel):
     vertex_project_id: str | None = None
     vertex_location: str | None = None
     google_credentials_path: str | None = None
+    veo_reference_model: str | None = None
 
 
 @app.post("/api/settings")

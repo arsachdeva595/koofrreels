@@ -27,6 +27,9 @@ _DEFAULTS: dict[str, Any] = {
     "vertex_project_id": "",
     "vertex_location": "us-central1",
     "google_credentials_path": "",
+    # Reference-capable Veo 3.1 model for UGC mode (creator + product in one shot).
+    # Must be enabled in the project's Vertex Model Garden.
+    "veo_reference_model": "veo-3.1-generate-001",
     # Koofr
     "koofr_default_folder": "/",
     # Brand voice (markdown string)

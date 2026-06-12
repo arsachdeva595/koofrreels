@@ -325,6 +325,8 @@ def run_ai_pipeline(job: Job, params: dict[str, Any]) -> None:
         reel_type = params.get("reel_type", "story")
         character_image_path = params.get("character_image_path")
         keyframe_paths = params.get("keyframe_paths") or []
+        # Reference-capable model for UGC (creator+product). Configurable in Settings.
+        ugc_model = settings_manager.get("veo_reference_model") or "veo-3.1-generate-001"
         n_scenes = len(scenes)
 
         # How images are used per reel type:
@@ -450,6 +452,7 @@ def run_ai_pipeline(job: Job, params: dict[str, Any]) -> None:
                 "vertex_location": location,
                 "image_path": image_path,
                 "reference_image_paths": reference_image_paths,
+                "model": ugc_model if reference_image_paths else None,
                 "negative_prompt": neg_prompt,
             })
 
@@ -466,6 +469,7 @@ def run_ai_pipeline(job: Job, params: dict[str, Any]) -> None:
                     "vertex_location": location,
                     "image_path": image_path,
                     "reference_image_paths": reference_image_paths,
+                    "model": ugc_model if reference_image_paths else None,
                     "negative_prompt": neg_prompt,
                 })
                 if result.success:

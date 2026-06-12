@@ -469,6 +469,12 @@
           <div class="hint">Path to a service account JSON key file. Or skip this and run: <code>gcloud auth application-default login</code></div>
         </div>
 
+        <div class="field">
+          <label>UGC Reference Model <span style="color:#555">(for AI Reels → UGC only)</span></label>
+          <input type="text" id="veo_reference_model" placeholder="veo-3.1-generate-001" />
+          <div class="hint">The reference-capable Veo&nbsp;3.1 model used for UGC (creator + product in one shot). Must be <strong>enabled in your Vertex project's Model Garden</strong>. Try <code>veo-3.1-generate-001</code>; if that 404s, open Model Garden, enable Veo&nbsp;3.1, and paste the exact model ID shown on its card. Other AI Reel types don't use this.</div>
+        </div>
+
         <button class="btn-save" onclick="saveApiKeys()">Save API Keys</button>
       </div>
 
@@ -755,6 +761,7 @@ Short. 1-2 lines max. Example:
         setVal('vertex_project_id', settings.vertex_project_id || '');
         setVal('vertex_location', settings.vertex_location || 'us-central1');
         setVal('google_credentials_path', settings.google_credentials_path || '');
+        setVal('veo_reference_model', settings.veo_reference_model || '');
 
         // Koofr tab
         setVal('koofr_default_folder', settings.koofr_default_folder || '/');
@@ -797,7 +804,8 @@ Short. 1-2 lines max. Example:
                       'publer_api_key', 'publer_workspace_id', 'pexels_api_key',
                       'elevenlabs_api_key', 'elevenlabs_voice_id',
                       'fal_api_key', 'wavespeed_api_key',
-                      'vertex_project_id', 'vertex_location', 'google_credentials_path'];
+                      'vertex_project_id', 'vertex_location', 'google_credentials_path',
+                      'veo_reference_model'];
       fields.forEach(f => {
         const v = document.getElementById(f).value.trim();
         if (v && v !== '••••••••') body[f] = v;
