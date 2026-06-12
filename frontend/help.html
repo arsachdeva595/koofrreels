@@ -261,6 +261,7 @@
           <tr><td>🎭 Character Driven</td><td>Upload one reference image used as the visual anchor in <em>every</em> clip — keeps a consistent character/person throughout.</td></tr>
           <tr><td>🚫 No Characters</td><td>Forces <strong>zero humans</strong> on screen — only objects, scenery, textures, and the subject. Good for product/abstract/nature stories.</td></tr>
           <tr><td>🛍️ Product</td><td>Upload a product image. Claude reads the product from the image, builds the story around it, and shows the product in the key "hero" scenes.</td></tr>
+          <tr><td>🗣️ UGC</td><td>Upload <strong>both a creator and a product</strong> image. Generates an authentic creator-style review where the model holds/uses the product on camera throughout. See the dedicated UGC section below.</td></tr>
         </table>
 
         <h3>Script framework</h3>
@@ -288,6 +289,29 @@
         </div>
         <div class="tip">💡 With <strong>Generate voiceover ON</strong>, the AI clips are made <em>silent of speech</em> on purpose — your ElevenLabs voice is the only narration, so the two never clash. Turn it off and Veo3 will speak the dialogue itself.</div>
         <div class="note">ℹ️ Veo3 clips are 8 seconds max each; longer reels are built by generating and joining several clips. Generation takes a few minutes per reel.</div>
+
+        <h3 style="margin-top:30px">🗣️ UGC mode — creator + product together</h3>
+        <p>UGC mode generates an <strong>authentic user-generated-content style ad</strong>: a creator on camera holds, uses, and reviews your product — exactly like a real recommendation video. You upload <strong>two images</strong> (a creator and a product) and Veo 3.1 keeps <em>both</em> in the same shot using reference images, so the model is shown actually using the product throughout.</p>
+
+        <div class="context-box">
+          <div class="lbl">When to use this</div>
+          <p>Use UGC for <strong>product ads that need to feel personal and authentic</strong> — influencer-style reviews, "honest opinion" demos, unboxings. It reads like a real person recommending the product, not a polished brand ad.</p>
+        </div>
+
+        <div class="prereq">
+          <span class="lbl">Needs:</span> A <strong>creator image</strong> + a <strong>product image</strong> · Google Cloud Vertex + credentials · Anthropic key · ElevenLabs <em>(optional)</em>. <strong>Important:</strong> UGC uses a higher-tier reference-capable Veo&nbsp;3.1 model, so it <strong>costs more</strong> than the other AI Reel types and that model must be enabled in your Vertex project.
+        </div>
+
+        <div class="steps">
+          <ol>
+            <li>In <strong>🤖 AI Reels</strong>, pick the <strong>🗣️ UGC</strong> reel type.</li>
+            <li>Upload a <strong>🧑 Creator Image</strong> (the person who'll appear on camera) and a <strong>🛍️ Product Image</strong> — both are required.</li>
+            <li>Write your prompt (e.g. <em>"honest review of my new everyday tote bag"</em>) and pick a <strong>Script framework</strong> — <strong>Hook·Value·CTA</strong> or <strong>PAS</strong> work great for UGC.</li>
+            <li>Set duration, music, and toggles as usual, then <strong>Generate</strong>.</li>
+            <li>The script is written as a first-person creator monologue; <strong>review &amp; approve</strong>, then download/publish.</li>
+          </ol>
+        </div>
+        <div class="tip">💡 Use a clear, well-lit creator image (face visible) and a clean product image on a plain background — the cleaner the references, the more faithfully Veo keeps the creator and product looking consistent across scenes.</div>
       </div>
 
       <!-- ── MEME CLIPS ─────────────────────────────────────────────────────── -->
