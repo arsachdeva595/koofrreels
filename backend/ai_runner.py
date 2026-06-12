@@ -459,25 +459,51 @@ def run_ai_pipeline(job: Job, params: dict[str, Any]) -> None:
         job.update(progress_pct=40)
 
         target_dur = reel_brief["target_duration_seconds"]
-        edit_decisions = edit_planner.plan_edit(
-            clip_manifest, scenes, target_dur,
-            scene_vo_durations=scene_vo_durations or None,
-        )
 
-        # Character mode: push trim_in forward by CHARACTER_TRIM on every cut
-        # so the static reference frame Veo3 puts at position 0 is never shown.
-        if reel_type == "character":
-            for cut in edit_decisions["cuts"]:
-                new_in = cut["trim_in"] + CHARACTER_TRIM
-                # Never let trim_in meet or exceed trim_out
-                if new_in < cut["trim_out"] - 0.5:
-                    cut["trim_in"] = round(new_in, 3)
+        if params.get("skip_edit_planner"):
+            cuts = []
+            for i, clip in enumerate(clip_manifest["clips"]):
+                trim_in = CHARACTER_TRIM if reel_type == "character" else 0.0
+                trim_out = round(clip["duration_seconds"], 3)
+                if trim_out <= trim_in:
+                    trim_out = round(min(trim_in + 3.0, clip["duration_seconds"]), 3)
+                cuts.append({
+                    "order": i,
+                    "clip_id": clip["clip_id"],
+                    "trim_in": trim_in,
+                    "trim_out": trim_out,
+                    "transition": "hard_cut",
+                    "transition_duration_seconds": 0.01,
+                    "scene": clip.get("scene") or (i + 1),
+                })
+            total = sum(c["trim_out"] - c["trim_in"] for c in cuts)
+            edit_decisions = {
+                "version": "1.1",
+                "cuts": cuts,
+                "total_duration_seconds": round(max(total, 1.0), 2),
+                "music_start_offset_seconds": 0.0,
+                "abt_timing": {},
+            }
+            job.end_stage("edit_decisions", f"{len(cuts)} clips · {edit_decisions['total_duration_seconds']:.1f}s · edit planner skipped")
+        else:
+            edit_decisions = edit_planner.plan_edit(
+                clip_manifest, scenes, target_dur,
+                scene_vo_durations=scene_vo_durations or None,
+            )
 
-        abt_timing = edit_decisions.get("abt_timing", {})
-        abt_desc = ", ".join(f"{r}@{t}s" for r, t in abt_timing.items()) if abt_timing else ""
-        job.end_stage("edit_decisions",
-                      f"{len(edit_decisions['cuts'])} cuts · {edit_decisions['total_duration_seconds']:.1f}s"
-                      + (f" · {abt_desc}" if abt_desc else ""))
+            # Character mode: push trim_in forward by CHARACTER_TRIM on every cut
+            # so the static reference frame Veo3 puts at position 0 is never shown.
+            if reel_type == "character":
+                for cut in edit_decisions["cuts"]:
+                    new_in = cut["trim_in"] + CHARACTER_TRIM
+                    if new_in < cut["trim_out"] - 0.5:
+                        cut["trim_in"] = round(new_in, 3)
+
+            abt_timing = edit_decisions.get("abt_timing", {})
+            abt_desc = ", ".join(f"{r}@{t}s" for r, t in abt_timing.items()) if abt_timing else ""
+            job.end_stage("edit_decisions",
+                          f"{len(edit_decisions['cuts'])} cuts · {edit_decisions['total_duration_seconds']:.1f}s"
+                          + (f" · {abt_desc}" if abt_desc else ""))
 
         # ── STAGE 6: compose ───────────────────────────────────────────────────
         job.begin_stage("compose", "Composing Reel", "Normalizing clips in parallel...")

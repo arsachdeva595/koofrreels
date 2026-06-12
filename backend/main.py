@@ -476,6 +476,7 @@ class AIGenerateRequest(BaseModel):
     character_image_path: str | None = None
     keyframe_paths: list[str] | None = None
     skip_storyboard: bool = False                 # use prompt as raw scene script, skip Claude
+    skip_edit_planner: bool = False               # use clips as-is, skip cut planning
 
 
 @app.post("/ai/generate")

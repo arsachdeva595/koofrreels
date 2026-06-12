@@ -1273,6 +1273,16 @@
             <span class="slider"></span>
           </label>
         </div>
+        <div class="toggle-row">
+          <span class="toggle-label" style="display:flex;flex-direction:column;gap:2px">
+            Skip edit planner
+            <span style="font-size:11px;color:#666;font-weight:400">Clips play as generated — no trimming or cut planning applied.</span>
+          </span>
+          <label class="switch">
+            <input type="checkbox" id="ai-skip-edit-planner" />
+            <span class="slider"></span>
+          </label>
+        </div>
       </div>
     </div>
 
@@ -2931,6 +2941,7 @@
       character_image_path: aiReelType === 'character' ? aiCharImagePath : null,
       keyframe_paths: aiReelType === 'story' && aiKeyframePaths.length ? aiKeyframePaths : null,
       skip_storyboard: document.getElementById('ai-skip-storyboard').checked,
+      skip_edit_planner: document.getElementById('ai-skip-edit-planner').checked,
     };
 
     try {
