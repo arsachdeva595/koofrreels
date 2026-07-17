@@ -162,10 +162,12 @@
       <button class="stab active" onclick="showTab('reels')"><span class="icon">🎬</span> Reels</button>
       <button class="stab" onclick="showTab('stock')"><span class="icon">🎞</span> Stock</button>
       <button class="stab" onclick="showTab('ai')"><span class="icon">🤖</span> AI Reels</button>
+      <button class="stab" onclick="showTab('cinematic')"><span class="icon">🎥</span> Cinematic</button>
       <button class="stab" onclick="showTab('meme')"><span class="icon">😂</span> Meme Clips</button>
       <button class="stab" onclick="showTab('audio')"><span class="icon">🎵</span> Audio Clips</button>
       <div class="group-label">Workflow</div>
       <button class="stab" onclick="showTab('approve')"><span class="icon">✅</span> Review &amp; Approve</button>
+      <button class="stab" onclick="showTab('models')"><span class="icon">⚙️</span> Models &amp; Cost</button>
       <button class="stab" onclick="showTab('publish')"><span class="icon">📤</span> Publish &amp; Schedule</button>
       <button class="stab" onclick="showTab('output')"><span class="icon">📁</span> Download &amp; Output</button>
     </div>
@@ -242,8 +244,8 @@
 
       <!-- ── AI REELS ───────────────────────────────────────────────────────── -->
       <div class="tab-panel" id="tab-ai">
-        <h2>🤖 AI Reels — generated with Google Veo3</h2>
-        <p class="section-desc">Every clip is generated from scratch by <strong>Google Veo3</strong> — fully original footage that exists nowhere else. The most powerful and brand-controllable mode.</p>
+        <h2>🤖 AI Reels — 100% generated footage</h2>
+        <p class="section-desc">Every clip is generated from scratch — fully original footage that exists nowhere else. The most powerful and brand-controllable mode. You choose which <strong>video model</strong> generates the clips (Google Veo, fal.ai / Kling, or WaveSpeed) in <a href="#" onclick="showTab('models');return false;" style="color:#a78bfa">Models &amp; Cost</a>.</p>
 
         <div class="context-box">
           <div class="lbl">When to use this</div>
@@ -262,6 +264,7 @@
           <tr><td>🚫 No Characters</td><td>Forces <strong>zero humans</strong> on screen — only objects, scenery, textures, and the subject. Good for product/abstract/nature stories.</td></tr>
           <tr><td>🛍️ Product</td><td>Upload a product image. Claude reads the product from the image, builds the story around it, and shows the product in the key "hero" scenes.</td></tr>
           <tr><td>🗣️ UGC</td><td>Upload <strong>both a creator and a product</strong> image. Generates an authentic creator-style review where the model holds/uses the product on camera throughout. See the dedicated UGC section below.</td></tr>
+          <tr><td>🎥 Cinematic</td><td>Upload <strong>one</strong> character reference + a storyline. A cinematographer director shot-lists a short film-style sequence and the app <strong>generates its own keyframe stills</strong> (you don't upload them) with a continuity check before any video spend. See the dedicated <a href="#" onclick="showTab('cinematic');return false;" style="color:#a78bfa">🎥 Cinematic</a> tab.</td></tr>
         </table>
 
         <h3>Script framework</h3>
@@ -287,8 +290,8 @@
             <li>Preview → download or publish.</li>
           </ol>
         </div>
-        <div class="tip">💡 With <strong>Generate voiceover ON</strong>, the AI clips are made <em>silent of speech</em> on purpose — your ElevenLabs voice is the only narration, so the two never clash. Turn it off and Veo3 will speak the dialogue itself.</div>
-        <div class="note">ℹ️ Veo3 clips are 8 seconds max each; longer reels are built by generating and joining several clips. Generation takes a few minutes per reel.</div>
+        <div class="tip">💡 With <strong>Generate voiceover ON</strong>, the AI clips are made <em>silent of speech</em> on purpose — your ElevenLabs voice is the only narration, so the two never clash. Turn it off and the video model may speak the dialogue itself.</div>
+        <div class="note">ℹ️ Generated clips are only a few seconds each (model-dependent — e.g. Veo up to 8s, Kling a 5s floor), so longer reels are built by generating and joining several clips. Generation takes a few minutes per reel. Pick the video model in <a href="#" onclick="showTab('models');return false;" style="color:#a78bfa">Models &amp; Cost</a>.</div>
 
         <h3 style="margin-top:30px">🗣️ UGC mode — creator + product together</h3>
         <p>UGC mode generates an <strong>authentic user-generated-content style ad</strong>: a creator on camera holds, uses, and reviews your product — exactly like a real recommendation video. You upload <strong>two images</strong> (a creator and a product) and Veo 3.1 keeps <em>both</em> in the same shot using reference images, so the model is shown actually using the product throughout.</p>
@@ -312,6 +315,62 @@
           </ol>
         </div>
         <div class="tip">💡 Use a clear, well-lit creator image (face visible) and a clean product image on a plain background — the cleaner the references, the more faithfully Veo keeps the creator and product looking consistent across scenes.</div>
+      </div>
+
+      <!-- ── CINEMATIC ──────────────────────────────────────────────────────── -->
+      <div class="tab-panel" id="tab-cinematic">
+        <h2>🎥 Cinematic — one photo → a film-style sequence</h2>
+        <p class="section-desc">Give it <strong>one reference image of a character</strong> and a <strong>storyline</strong>. A cinematographer-style director shot-lists a short 15–30s sequence (shot type, lens, depth of field, camera move, cuts), the app <strong>generates its own keyframe stills</strong> for every shot, you review them, and only then does it spend on video. Built for a strong first draft plus cheap, targeted reshoots — not a flawless one-click final.</p>
+
+        <div class="context-box">
+          <div class="lbl">When to use this</div>
+          <p>Use Cinematic when you want a <strong>consistent character moving through a directed, film-look sequence</strong> — a brand story, a mood piece, a product-in-a-world reel — from a single photo, without filming or hand-picking keyframes. The other AI Reel types generate each clip more independently; Cinematic plans the whole shoot like a DP and locks the character across shots.</p>
+        </div>
+
+        <div class="prereq">
+          <span class="lbl">Needs:</span> One <strong>character reference image</strong> · <strong>fal.ai API key</strong> (for the keyframe stills — Nano Banana) · a configured <strong>video model</strong> (Google Veo, fal/Kling, or WaveSpeed — see <a href="#" onclick="showTab('models');return false;" style="color:#a78bfa">Models &amp; Cost</a>) · Anthropic key · ElevenLabs <em>(optional, voiceover)</em>. Set keys in <code>Settings → API Keys</code>. Best at <strong>shorter durations</strong>.
+        </div>
+
+        <h3>How it works — the pipeline</h3>
+        <table>
+          <tr><th>Stage</th><th>What happens</th></tr>
+          <tr><td>1. Shot plan</td><td>Claude directs a 4-beat arc (setup → build → turn → payoff) as a per-shot contract: shot type, lens, depth of field, camera move, transition, on-screen caption, and voiceover — plus one global <strong>style lock</strong> applied to every shot.</td></tr>
+          <tr><td>2. 🛑 Approval gate</td><td>You review the shot list (and edit captions/VO) <strong>before any spend</strong>.</td></tr>
+          <tr><td>3. Keyframe stills</td><td>The app generates a still for every shot with Nano Banana, keeping your character consistent (see <strong>Character lock</strong> below). Cheap.</td></tr>
+          <tr><td>4. 🛑 Continuity gate</td><td>Claude-vision checks each still against your reference for face/wardrobe <strong>drift</strong>. You review thumbnails and <strong>reshoot any still</strong> right there — still cheap, before video.</td></tr>
+          <tr><td>5. Clips</td><td>Each approved still becomes a short silent clip via your chosen video model. Strong-motion shots use start+end-frame interpolation (on fal/Kling).</td></tr>
+          <tr><td>6. Voice + edit</td><td>Per-shot ElevenLabs voiceover; clip lengths are trimmed to the voiceover.</td></tr>
+          <tr><td>7. Grade + compose</td><td>A single colour-match grade across all clips, transitions honoured (dissolves where the director asked), captions burned in, VO + music mixed.</td></tr>
+          <tr><td>8. Deliver</td><td>A graded 9:16 MP4, plus an <strong>estimated cost</strong> and a <strong>Review inputs</strong> button (see below).</td></tr>
+        </table>
+
+        <h3>Two approval gates</h3>
+        <p>Cinematic pauses <strong>twice</strong> — first on the shot plan, then on the generated stills (the <strong>Continuity Review</strong> tab). The continuity gate is your money-saver: catch a wrong face or outfit on a $0.04 still and reshoot it, instead of paying for a bad video clip. See <a href="#" onclick="showTab('approve');return false;" style="color:#a78bfa">Review &amp; Approve</a>.</p>
+
+        <h3>How to make a Cinematic reel</h3>
+        <div class="steps">
+          <ol>
+            <li>Open <strong>🤖 AI Reels</strong> and pick the <strong>🎥 Cinematic</strong> type.</li>
+            <li>Upload <strong>one</strong> clear, well-lit character reference image (face visible).</li>
+            <li>Write your <strong>storyline</strong> and set the <strong>Duration</strong>.</li>
+            <li>Click <strong>Generate</strong>. Review the <strong>shot plan</strong> → Approve.</li>
+            <li>Wait for the stills, then on the <strong>🎞 Continuity Review</strong> tab check each one; <strong>reshoot</strong> any that drifted (edit its prompt first if you like) → Approve stills.</li>
+            <li>The clips, voiceover, grade and compose run automatically → preview, download, or publish.</li>
+          </ol>
+        </div>
+
+        <h3>Settings that shape a Cinematic reel</h3>
+        <p>All in <code>Settings → API Keys</code> (full detail in <a href="#" onclick="showTab('models');return false;" style="color:#a78bfa">Models &amp; Cost</a>):</p>
+        <table>
+          <tr><th>Setting</th><th>Effect</th></tr>
+          <tr><td>Keyframe model</td><td>The fal image model for stills (default Nano Banana). Bump to the Pro model if you like.</td></tr>
+          <tr><td>Character lock</td><td><strong>Sheet</strong> (default) builds one character sheet and conditions every still on it; <strong>Chain</strong> feeds each still into the next; <strong>None</strong> uses only your reference. If stills feel too samey, try <strong>None</strong>.</td></tr>
+          <tr><td>Shot length</td><td>Target seconds per shot. Video bills per second at a ~5s floor per clip, so <strong>longer shots = fewer clips = less spend</strong>. ~5s uses the full clip; lower = more dynamic cutting but more cost.</td></tr>
+          <tr><td>AI Video Model</td><td>Which model turns stills into clips — the biggest cost lever. Kling Pro is premium; Standard / WAN are far cheaper for drafts.</td></tr>
+        </table>
+
+        <div class="tip">💡 Character stays the same but a shot looks like a copy of the last? That's the character sheet dominating — switch <strong>Character lock</strong> to <strong>None</strong> in Settings so each shot follows its own prompt more.</div>
+        <div class="note">ℹ️ Cinematic clips are made <strong>silent of speech</strong> on purpose — your ElevenLabs voice is the only narration. On-screen captions come from the director's per-shot text (editable at the first gate).</div>
       </div>
 
       <!-- ── MEME CLIPS ─────────────────────────────────────────────────────── -->
@@ -379,20 +438,84 @@
         <h3>What you can do in the review modal</h3>
         <table>
           <tr><th>Tab</th><th>What it shows</th></tr>
-          <tr><td>Scenes</td><td>One card per scene. You can <strong>edit the overlay text and voiceover</strong> line for each scene before approving.</td></tr>
+          <tr><td>Scenes &amp; Script</td><td>One card per scene/shot. Edit the <strong>on-screen text</strong> and <strong>voiceover</strong> line for each before approving. In Cinematic, each card also shows the <strong>cinematography</strong> (shot type, lens, DOF, camera move, cut).</td></tr>
           <tr><td>Summary</td><td>The reel's theme, duration, scene count, and music at a glance.</td></tr>
-          <tr><td>Flags</td><td>Any content-policy warnings detected in the visuals (e.g. risky words) so you can fix them first.</td></tr>
+          <tr><td>⚠ Policy Review</td><td>Any content-policy warnings detected in the visuals (e.g. risky words) so you can fix them first.</td></tr>
+          <tr><td>🎞 Continuity Review</td><td><strong>Cinematic only.</strong> A thumbnail of every generated still with a drift verdict (consistent / minor / drift). Edit a still's prompt and <strong>Reshoot</strong> it in place — no full rerun.</td></tr>
         </table>
 
         <div class="steps">
           <ol>
             <li>After you click Generate, wait for the status to reach <strong>"awaiting your approval."</strong></li>
-            <li>The review modal opens — read the scene cards.</li>
-            <li>Edit any <strong>overlay text</strong> or <strong>voiceover</strong> lines you want to change.</li>
-            <li>Click <strong>Approve</strong> to start rendering, or close to cancel.</li>
+            <li>The review modal opens — read the cards.</li>
+            <li>Edit any <strong>on-screen text</strong> or <strong>voiceover</strong> lines you want to change.</li>
+            <li>Click <strong>Approve</strong> to continue, or close to cancel.</li>
           </ol>
         </div>
-        <div class="note">ℹ️ The <strong>visual description</strong> of each scene isn't editable here. In AI Reels, control the visuals up front via the <strong>Reel type</strong> (e.g. No Characters / Product) and <strong>Script framework</strong> instead.</div>
+
+        <h3>Cinematic pauses twice</h3>
+        <p>The Cinematic type has <strong>two</strong> gates: first the <strong>shot plan</strong> (approve the shot list), then the <strong>Continuity Review</strong> on the generated stills (approve or reshoot). The continuity gate runs on cheap stills <strong>before any video spend</strong>, so a wrong face or outfit costs cents to fix, not a wasted clip. On a flagged still, edit its prompt and hit <strong>↻ Reshoot this still</strong>; the thumbnail and verdict update in place. Minor-drift stills are advisory — only clear <em>drift</em> is flagged for reshoot.</p>
+
+        <div class="tip">💡 The modal is scrollable with a pinned <strong>Approve</strong> bar — even a 12-still continuity list stays easy to review and approve without losing the button.</div>
+        <div class="note">ℹ️ The <strong>visual description</strong> of a scene isn't editable here. In AI Reels, steer visuals up front via the <strong>Reel type</strong> and <strong>Script framework</strong>; in Cinematic, edit the still's prompt at the Continuity gate.</div>
+      </div>
+
+      <!-- ── MODELS & COST ──────────────────────────────────────────────────── -->
+      <div class="tab-panel" id="tab-models">
+        <h2>⚙️ Models &amp; Cost</h2>
+        <p class="section-desc">Choose which AI models generate your video and control what you spend. Everything here lives in <code>Settings → API Keys</code>.</p>
+
+        <h3>AI Video Model — applies to <em>all</em> AI reels</h3>
+        <p>One toggle picks the provider that turns prompts/keyframes into clips, for every AI Reel type (Story, Character, Product, UGC, Cinematic). Every model field is a <strong>dropdown of curated models</strong> — with a <strong>Custom…</strong> option on each to paste any model ID/endpoint that isn't listed.</p>
+        <table>
+          <tr><th>Provider</th><th>Notes</th></tr>
+          <tr><td>Google Cloud — Veo</td><td>Uses your Vertex project + credentials and the Veo model IDs above. The only provider that also does <strong>text-only</strong> scenes (no reference image), so it's the safe pick for "No Characters" reels.</td></tr>
+          <tr><td>fal.ai</td><td>Kling, Hailuo, WAN, PixVerse, Seedance… Pick a model from the curated dropdown (with approx. cost) or choose <strong>Custom</strong> to paste any fal endpoint. <strong>Image-to-video</strong> — needs a keyframe/reference image.</td></tr>
+          <tr><td>WaveSpeed</td><td>Enter a WaveSpeed model slug (e.g. <code>wavespeed-ai/wan-i2v-480p</code>). Also image-to-video.</td></tr>
+        </table>
+        <div class="note">ℹ️ fal &amp; WaveSpeed are <strong>image-to-video</strong>: they need a first-frame image. For text-only scenes the app automatically falls back to Google Veo if your Vertex project is configured; otherwise it tells you to switch to Veo.</div>
+
+        <h3>fal video models &amp; rough cost</h3>
+        <p>When the provider is fal, pick from the dropdown — labels show an <strong>approximate per-second rate</strong> (verify exact pricing on the model's fal page). Video bills <strong>per second</strong>.</p>
+        <table>
+          <tr><th>Model</th><th>~Rate</th><th>Use for</th></tr>
+          <tr><td>Kling 3.0 Pro</td><td>~$0.12/s</td><td>Top quality final renders</td></tr>
+          <tr><td>Kling 2.6 / 2.1 Pro</td><td>~$0.10 / $0.098/s</td><td>Premium consistency</td></tr>
+          <tr><td>Kling 2.1 Standard</td><td>~$0.045/s</td><td>Great value — drafts &amp; iteration</td></tr>
+          <tr><td>MiniMax Hailuo 02 · PixVerse V6</td><td>~$0.045 / $0.04/s</td><td>Good mid-tier alternatives</td></tr>
+          <tr><td>WAN i2v</td><td>~$0.03/s</td><td>Cheapest / fastest drafts</td></tr>
+          <tr><td>Seedance 2</td><td>~$0.05/s</td><td>Start+end frame control</td></tr>
+          <tr><td>Custom…</td><td>—</td><td>Paste any fal endpoint manually</td></tr>
+        </table>
+
+        <h3>Cinematic-only settings</h3>
+        <table>
+          <tr><th>Setting</th><th>What it does</th></tr>
+          <tr><td>Keyframe model</td><td>fal image model for the stills (default <code>fal-ai/nano-banana/edit</code>). Bump to the Pro slug if you want.</td></tr>
+          <tr><td>Character lock</td><td><strong>Sheet</strong> (default) / <strong>Chain</strong> / <strong>None</strong> — how the character is kept consistent across stills. Use <strong>None</strong> if frames feel repetitive.</td></tr>
+          <tr><td>Shot length</td><td>Target seconds per shot (default 5). Drives how many shots/clips are generated.</td></tr>
+        </table>
+
+        <h3>How cost works — and how to cut it</h3>
+        <div class="context-box">
+          <div class="lbl">The one thing to know</div>
+          <p>Video is billed <strong>per second</strong>, and each clip is generated at a <strong>~5-second floor</strong> — even if your shot only keeps ~2s after trimming. So the two big levers are the <strong>model</strong> you pick and the <strong>number of clips</strong> (shots).</p>
+        </div>
+        <table>
+          <tr><th>Lever</th><th>Effect</th></tr>
+          <tr><td>Cheaper model</td><td>Kling 2.1 <em>Standard</em> (~$0.045/s) or WAN (~$0.03/s) instead of Kling Pro (~$0.098/s) ≈ <strong>2–3× cheaper</strong>.</td></tr>
+          <tr><td>Longer shots</td><td>Raise <strong>Shot length</strong> to ~5s → fewer, longer clips → fewer 5s billings for the same reel (≈ half the clips).</td></tr>
+          <tr><td>Continuity gate</td><td>Reshoot bad <strong>stills</strong> ($0.04) instead of bad <strong>clips</strong> ($0.25–0.60).</td></tr>
+        </table>
+        <div class="tip">💡 Iterate on <strong>fal → Kling 2.1 Standard</strong> (or WAN) at ~5s shots to keep drafts around <strong>$1–1.5</strong>, then switch to <strong>Kling Pro</strong> for the final render once you're happy with the shot list.</div>
+
+        <h3>See exactly what you spent &amp; sent</h3>
+        <p>Every finished reel shows an <strong>Est. cost</strong> and a <strong>📋 Review inputs &amp; cost</strong> button. It opens two tabs:</p>
+        <table>
+          <tr><td><strong>Cost</strong></td><td>Per-stage breakdown (director, stills, continuity checks, clips, voiceover) with units × rate → total. Estimates — tune the rates if yours differ.</td></tr>
+          <tr><td><strong>Inputs &amp; Prompts</strong></td><td>The global style lock, the models used, and per shot: the exact <strong>still prompt</strong> and <strong>clip prompt</strong> that were sent to the models, plus captions and VO.</td></tr>
+        </table>
+        <div class="note">ℹ️ Rates shown in the app are approximate mid-2026 estimates for guidance. Your real invoice is on each provider's dashboard.</div>
       </div>
 
       <!-- ── PUBLISH & SCHEDULE ─────────────────────────────────────────────── -->
@@ -427,8 +550,9 @@
         <h3>Download a reel</h3>
         <div class="steps">
           <ol>
-            <li>When a job completes, the result view shows a video preview.</li>
+            <li>When a job completes, the result view shows a video preview and, for AI reels, an <strong>estimated cost</strong>.</li>
             <li>Click <strong>Download</strong> to save the <code>.mp4</code> to your computer.</li>
+            <li>For Cinematic reels, <strong>📋 Review inputs &amp; cost</strong> opens the per-stage cost breakdown and the exact prompts sent to each model — see <a href="#" onclick="showTab('models');return false;" style="color:#a78bfa">Models &amp; Cost</a>.</li>
           </ol>
         </div>
 

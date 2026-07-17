@@ -66,6 +66,11 @@ class VideoComposer(BaseTool):
         if len(clips) == 1:
             return self._single_clip(clips[0]["path"], output_path)
 
+        # Crossfade path when the edit calls for any dissolve; otherwise the fast
+        # stream-copy concat (exact hard cuts, no re-encode).
+        if any(c.get("transition") == "dissolve" for c in clips):
+            return self._concat_xfade(clips, output_path)
+
         return self._concat_stream_copy(clips, output_path)
 
     def _single_clip(self, path: str, output_path: str) -> ToolResult:
@@ -128,3 +133,48 @@ class VideoComposer(BaseTool):
         if result.returncode != 0:
             return ToolResult(success=False, error=result.stderr[-800:])
         return ToolResult(success=True, data={"output_path": output_path})
+
+    def _concat_xfade(self, clips: list[dict], output_path: str) -> ToolResult:
+        """Compose with crossfades, honouring each clip's transition_duration: a real
+        dissolve where the director asked, a ~2-frame micro-fade on hard cuts so the whole
+        timeline is one xfade graph. Each boundary OVERLAPS by transition_duration — the same
+        value VO/text timing subtract — so they stay in sync. Audio is a generated silent
+        track; the real VO+music is mixed in downstream. Falls back to plain concat on error."""
+        n = len(clips)
+        durs = [float(c["duration_seconds"]) for c in clips]
+        tds = []
+        for i in range(n - 1):
+            td = float(clips[i].get("transition_duration", 0.067) or 0.067)
+            td = max(0.03, min(td, durs[i] - 0.05, durs[i + 1] - 0.05))
+            tds.append(round(td, 3))
+
+        inputs: list[str] = []
+        for c in clips:
+            inputs += ["-i", c["path"]]
+        total = sum(durs) - sum(tds)
+        inputs += ["-f", "lavfi", "-t", f"{total:.3f}", "-i", "anullsrc=channel_layout=stereo:sample_rate=44100"]
+        silent_idx = n
+
+        parts = []
+        prev = "[0:v]"
+        out_dur = durs[0]
+        for i in range(1, n):
+            t = tds[i - 1]
+            offset = out_dur - t
+            label = "[vout]" if i == n - 1 else f"[vx{i}]"
+            parts.append(f"{prev}[{i}:v]xfade=transition=fade:duration={t}:offset={offset:.3f}{label}")
+            out_dur = out_dur + durs[i] - t
+            prev = label
+        filter_complex = ";".join(parts)
+
+        base = ["ffmpeg", "-nostdin", "-y", *inputs, "-filter_complex", filter_complex,
+                "-map", "[vout]", "-map", f"{silent_idx}:a", "-shortest"]
+        tail = ["-c:a", "aac", "-b:a", "128k", output_path]
+        for vcodec in (["-c:v", "h264_videotoolbox", "-q:v", "55"],
+                       ["-c:v", "libx264", "-preset", "ultrafast", "-crf", "22"]):
+            r = subprocess.run(base + vcodec + tail, capture_output=True, text=True,
+                               timeout=1800, stdin=subprocess.DEVNULL)
+            if r.returncode == 0:
+                return ToolResult(success=True, data={"output_path": output_path})
+        # xfade failed — don't lose the reel; fall back to a plain hard-cut concat.
+        return self._concat_stream_copy(clips, output_path)

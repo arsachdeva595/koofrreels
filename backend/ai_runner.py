@@ -478,18 +478,25 @@ def run_ai_pipeline(job: Job, params: dict[str, Any]) -> None:
             except Exception:
                 return original
 
-        def _generate_scene_clip(args: tuple[int, dict]) -> tuple[int, dict | None, str | None]:
-            i, scene = args
+        def _generate_scene_clip(unit: dict) -> tuple[int, dict | None, str | None]:
+            order = unit["order"]
+            i = unit["scene_index"]
+            scene = unit["scene"]
+            sub = unit.get("sub", 0)
             prompt = scene["visual_description"]
             hint = scene.get("clip_hint", "")
             if hint:
                 prompt = f"{prompt}. {hint}"
+            if sub > 0:
+                # Continuation clip for a long-narration scene — same moment, fresh angle.
+                prompt = f"{prompt}. Continuation of the same moment: same setting and subject, a fresh camera angle, seamless."
             dialogue = scene_dialogues.get(i, "")
             if dialogue:
                 prompt = f'{prompt}. Character says: "{dialogue}"'
 
-            duration = min(int(scene.get("duration_seconds", 5)), VEO3_MAX_DURATION)
-            dest_path = str(clips_dir / f"clip_{i:03d}_veo3.mp4")
+            _dur_src = unit.get("target_dur") or scene.get("duration_seconds", 5)
+            duration = min(int(round(_dur_src)) or 5, VEO3_MAX_DURATION)
+            dest_path = str(clips_dir / f"clip_{order:03d}_veo3.mp4")
 
             image_path = None
             reference_image_paths = None
@@ -521,7 +528,7 @@ def run_ai_pipeline(job: Job, params: dict[str, Any]) -> None:
             # ── Auto-retry on policy violation (Veo content policy) ──────────
             if not result.success and _is_policy_error(result.error):
                 safe_prompt = _rewrite_safe_prompt(prompt)
-                retry_path = str(clips_dir / f"clip_{i:03d}_retry.mp4")
+                retry_path = str(clips_dir / f"clip_{order:03d}_retry.mp4")
                 result = _generate_video_clip(
                     ai_provider, prompt=safe_prompt, dest_path=retry_path,
                     image_path=image_path, reference_image_paths=reference_image_paths,
@@ -532,14 +539,15 @@ def run_ai_pipeline(job: Job, params: dict[str, Any]) -> None:
                 if result.success:
                     dest_path = retry_path
             if not result.success:
-                return i, None, f"Clip generation failed for scene {i + 1} ({ai_provider}): {result.error}"
+                return order, None, f"Clip generation failed for scene {i + 1} ({ai_provider}): {result.error}"
 
             an = ClipAnalyzer().execute({"local_path": dest_path})
             if not an.success:
-                return i, None, f"Could not analyze generated clip for scene {i + 1}"
+                return order, None, f"Could not analyze generated clip for scene {i + 1}"
 
-            return i, {
-                "clip_id": f"clip_{i:03d}",
+            return order, {
+                "clip_id": f"clip_{order:03d}",
+                "order": order,
                 "filename": Path(dest_path).name,
                 "local_path": dest_path,
                 "duration_seconds": float(an.data["duration_seconds"]),
@@ -547,25 +555,65 @@ def run_ai_pipeline(job: Job, params: dict[str, Any]) -> None:
                 "fps": an.data["fps"],
                 "selection_reason": f"{ai_provider}: {scene['visual_description'][:60]}",
                 "scene": scene["scene"],
+                "sub": sub,
+                "target_dur": unit.get("target_dur"),
+                "pad": unit.get("pad", 0.0),
                 "score": None,
             }, None
+
+        # Build render units: one per scene, EXCEPT when voiceover drives the edit —
+        # then a scene whose narration is longer than one clip fans out into several
+        # units (multi-clip) so the visual can cover the full VO and nothing is cut.
+        from tools.audio.pause_detector import plan_beat_clips
+
+        def _pad_for(scene: dict) -> float:
+            if reel_type == "character":
+                return CHARACTER_TRIM
+            if reel_type == "product" and product_image_path and scene.get("feature_product"):
+                return CHARACTER_TRIM
+            return 0.0
+
+        multiclip_vo = bool(scene_vo_durations) and not params.get("skip_edit_planner")
+        _clip_secs = _provider_clip_seconds(ai_provider)
+        render_units: list[dict] = []
+        _uorder = 0
+        for si, scene in enumerate(scenes):
+            pad = _pad_for(scene)
+            vo = scene_vo_durations.get(scene["scene"], 0.0) if multiclip_vo else 0.0
+            if multiclip_vo and vo > 0:
+                usable = max(2.0, _clip_secs - pad)
+                for c in plan_beat_clips([{"start": 0, "end": vo, "duration": vo}], max_clip_seconds=usable):
+                    render_units.append({"order": _uorder, "scene_index": si, "scene": scene,
+                                         "sub": c["sub_index"], "target_dur": c["target_duration"], "pad": pad})
+                    _uorder += 1
+            elif multiclip_vo:
+                usable = max(2.0, _clip_secs - pad)
+                render_units.append({"order": _uorder, "scene_index": si, "scene": scene, "sub": 0,
+                                     "target_dur": round(min(float(scene.get("duration_seconds", 5)), usable), 3), "pad": pad})
+                _uorder += 1
+            else:
+                render_units.append({"order": _uorder, "scene_index": si, "scene": scene, "sub": 0,
+                                     "target_dur": None, "pad": pad})
+                _uorder += 1
+        n_units = len(render_units)
 
         clip_entries_raw: dict[int, dict] = {}
         gen_done = 0
         gen_errors: list[str] = []
         with ThreadPoolExecutor(max_workers=4) as pool:
-            futures = {pool.submit(_generate_scene_clip, (i, s)): i for i, s in enumerate(scenes)}
+            futures = {pool.submit(_generate_scene_clip, u): u["order"] for u in render_units}
             for fut in as_completed(futures):
                 idx, entry, err = fut.result()
                 gen_done += 1
                 if err:
                     gen_errors.append(err)
-                    job.update(message=f"Scene {idx + 1} failed: {err}")
+                    job.update(message=f"Clip {gen_done} failed: {err}")
                 else:
                     clip_entries_raw[idx] = entry
                     job.update(
-                        progress_pct=25 + int((gen_done / n_scenes) * 12),
-                        message=f"Generated {gen_done}/{n_scenes} AI clips",
+                        progress_pct=25 + int((gen_done / n_units) * 12),
+                        message=f"Generated {gen_done}/{n_units} AI clips"
+                        + (" (VO-timed)" if multiclip_vo else ""),
                     )
 
         clip_entries = [clip_entries_raw[i] for i in sorted(clip_entries_raw)]
@@ -573,7 +621,7 @@ def run_ai_pipeline(job: Job, params: dict[str, Any]) -> None:
         if len(clip_entries) < 2:
             first_err = gen_errors[0] if gen_errors else "unknown error"
             raise RuntimeError(
-                f"Only {len(clip_entries)}/{n_scenes} Veo3 clips generated — need at least 2. "
+                f"Only {len(clip_entries)}/{n_units} AI clips generated — need at least 2. "
                 f"Error: {first_err}"
             )
 
@@ -626,6 +674,34 @@ def run_ai_pipeline(job: Job, params: dict[str, Any]) -> None:
                 "abt_timing": {},
             }
             job.end_stage("edit_decisions", f"{len(cuts)} clips · {edit_decisions['total_duration_seconds']:.1f}s · edit planner skipped")
+        elif multiclip_vo:
+            # Voiceover drives the edit: one hard cut per unit, each trimmed to its
+            # chunk (after the char/product pad). A scene's units sum to its full VO
+            # length, so build_positioned_voiceover (grouped by scene) plays the whole
+            # narration with nothing chopped.
+            cuts = []
+            for clip in sorted(clip_manifest["clips"], key=lambda c: c.get("order", 0)):
+                pad = clip.get("pad", 0.0)
+                clip_len = clip["duration_seconds"]
+                target = clip.get("target_dur")
+                trim_in = pad if pad < clip_len - 0.3 else 0.0
+                trim_out = round(min(trim_in + (target if target is not None else clip_len), clip_len), 3)
+                if trim_out <= trim_in:
+                    trim_out = round(min(trim_in + 2.0, clip_len), 3)
+                cuts.append({
+                    "order": clip["order"], "clip_id": clip["clip_id"],
+                    "trim_in": trim_in, "trim_out": trim_out,
+                    "transition": "hard_cut", "transition_duration_seconds": 0.0,
+                    "scene": clip.get("scene"),
+                })
+            total = sum(c["trim_out"] - c["trim_in"] for c in cuts)
+            edit_decisions = {
+                "version": "1.1", "cuts": cuts,
+                "total_duration_seconds": round(max(total, 1.0), 2),
+                "music_start_offset_seconds": 0.0, "abt_timing": {},
+            }
+            job.end_stage("edit_decisions",
+                          f"{len(cuts)} clips · {edit_decisions['total_duration_seconds']:.1f}s · VO-timed (full voiceover)")
         else:
             edit_decisions = edit_planner.plan_edit(
                 clip_manifest, scenes, target_dur,
@@ -701,7 +777,10 @@ def run_ai_pipeline(job: Job, params: dict[str, Any]) -> None:
             raise RuntimeError(f"Composition failed: {compose_result.error}")
 
         job.update(progress_pct=78, message="Rendering per-scene text overlays...")
-        scene_text = _compute_scene_text_timing(normalized_clips, cuts_ordered, scenes)
+        # Multi-clip scenes need scene-grouped text timing (one overlay spanning the
+        # scene's clips), not per-clip — otherwise the mapping breaks.
+        scene_text = (_cinematic_text_timing(normalized_clips, cuts_ordered, scenes)
+                      if multiclip_vo else _compute_scene_text_timing(normalized_clips, cuts_ordered, scenes))
         titled_path = composed_path
         if scene_text and reel_brief.get("include_text", True):
             titled_path = str(tmp_dir / "titled.mp4")
@@ -1438,7 +1517,7 @@ def _run_cinematic_finish(job: Job, params: dict, project_dir: Path, project_id:
 # keyframes/clips per beat → cut on the pauses, full VO laid over (no truncation).
 # ══════════════════════════════════════════════════════════════════════════════
 
-def _cinematic_clip_seconds(provider: str) -> int:
+def _provider_clip_seconds(provider: str) -> int:
     """How long each generated clip is for this provider — used both to cap beat
     splitting and as the generation duration, so a clip is never shorter than the
     segment it must cover (which would desync the VO)."""
@@ -1492,7 +1571,7 @@ def _run_cinematic_plan(job: Job, params: dict, project_dir: Path, storyboard: d
         return None, None, 0.0
 
     provider = (settings_manager.get("ai_video_provider", "veo3") or "veo3").lower()
-    clip_secs = _cinematic_clip_seconds(provider)
+    clip_secs = _provider_clip_seconds(provider)
 
     # Detect each shot's pauses → segments that tile the shot's full VO length.
     shot_segments: dict[int, list[dict]] = {}
@@ -1571,7 +1650,7 @@ def _run_cinematic_clips_planned(job: Job, params: dict, project_dir: Path,
     clips_dir.mkdir(parents=True, exist_ok=True)
 
     provider = (settings_manager.get("ai_video_provider", "veo3") or "veo3").lower()
-    clip_secs = _cinematic_clip_seconds(provider)
+    clip_secs = _provider_clip_seconds(provider)
     vx_project = settings_manager.get("vertex_project_id")
     vx_location = settings_manager.get("vertex_location", "us-central1")
     veo_model = settings_manager.get("veo_standard_model") or "veo-3.1-lite-generate-001"

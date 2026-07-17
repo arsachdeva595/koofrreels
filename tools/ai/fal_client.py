@@ -52,6 +52,8 @@ class FalClient(BaseTool):
             return self._image_to_image(params)
         if operation == "text_to_image":
             return self._text_to_image(params)
+        if operation == "image_generate":
+            return self._image_generate(params)
         if operation == "tryon":
             return self._tryon(params)
         if operation == "remove_background":
@@ -69,8 +71,17 @@ class FalClient(BaseTool):
             "Content-Type": "application/json",
         }
 
-    def _submit(self, endpoint: str, payload: dict) -> tuple[str | None, str | None]:
-        """Submit a job to the fal queue. Returns (request_id, error)."""
+    @staticmethod
+    def _app_id(endpoint: str) -> str:
+        """fal's queue status/result URLs key off the APP id (owner/app), not the
+        full route. e.g. submit to 'fal-ai/nano-banana/edit' but poll
+        'fal-ai/nano-banana/requests/{id}/status'. Used only as a fallback when the
+        submit response doesn't return explicit status/response URLs."""
+        return "/".join(endpoint.split("/")[:2])
+
+    def _submit(self, endpoint: str, payload: dict) -> tuple[dict | None, str | None]:
+        """Submit a job to the fal queue. Returns (submit_response, error). The response
+        carries request_id and (usually) status_url / response_url."""
         api_key = self._api_key()
         if not api_key:
             return None, "FAL_API_KEY not set"
@@ -79,15 +90,17 @@ class FalClient(BaseTool):
             with httpx.Client(timeout=30) as client:
                 resp = client.post(url, headers=self._headers(), json=payload)
                 if not resp.is_success:
-                    return None, f"fal.ai HTTP {resp.status_code}: {resp.text[:500]}"
-                return resp.json()["request_id"], None
+                    body = resp.text[:500]
+                    low = body.lower()
+                    if resp.status_code in (401, 403) and any(w in low for w in ("locked", "balance", "exhaust")):
+                        return None, "fal.ai account locked — exhausted balance. Top up at fal.ai/dashboard/billing."
+                    return None, f"fal.ai HTTP {resp.status_code}: {body}"
+                return resp.json(), None
         except Exception as exc:
             return None, str(exc)
 
-    def _poll(self, endpoint: str, request_id: str) -> tuple[dict | None, str | None]:
-        """Poll until COMPLETED or timeout. Returns (result_dict, error)."""
-        status_url = f"{FAL_QUEUE_BASE}/{endpoint}/requests/{request_id}/status"
-        result_url = f"{FAL_QUEUE_BASE}/{endpoint}/requests/{request_id}"
+    def _poll(self, status_url: str, result_url: str) -> tuple[dict | None, str | None]:
+        """Poll status_url until COMPLETED or timeout, then GET result_url."""
         deadline = time.time() + MAX_WAIT
         while time.time() < deadline:
             time.sleep(POLL_INTERVAL)
@@ -106,6 +119,18 @@ class FalClient(BaseTool):
             except Exception as exc:
                 return None, str(exc)
         return None, "fal.ai polling timed out after 10 minutes"
+
+    def _submit_poll(self, endpoint: str, payload: dict) -> tuple[dict | None, str | None]:
+        """Submit a job and poll it to completion. Prefers the status/response URLs
+        returned by fal; falls back to constructing them from the app id."""
+        sub, err = self._submit(endpoint, payload)
+        if err:
+            return None, err
+        request_id = sub.get("request_id")
+        app = self._app_id(endpoint)
+        status_url = sub.get("status_url") or f"{FAL_QUEUE_BASE}/{app}/requests/{request_id}/status"
+        result_url = sub.get("response_url") or f"{FAL_QUEUE_BASE}/{app}/requests/{request_id}"
+        return self._poll(status_url, result_url)
 
     def _download(self, url: str, dest_path: str) -> str | None:
         """Stream-download a URL to dest_path. Returns error string or None."""
@@ -158,12 +183,13 @@ class FalClient(BaseTool):
             payload["duration"] = str(duration)  # Kling expects string enum "5" or "10"
         if params.get("aspect_ratio"):
             payload["aspect_ratio"] = params["aspect_ratio"]
+        # First-last-frame interpolation: the end keyframe (Kling uses "tail_image_url").
+        if params.get("tail_image_url"):
+            payload["tail_image_url"] = params["tail_image_url"]
+        if params.get("negative_prompt"):
+            payload["negative_prompt"] = params["negative_prompt"]
 
-        request_id, err = self._submit(endpoint, payload)
-        if err:
-            return ToolResult(success=False, error=err)
-
-        result, err = self._poll(endpoint, request_id)
+        result, err = self._submit_poll(endpoint, payload)
         if err:
             return ToolResult(success=False, error=err)
 
@@ -194,11 +220,7 @@ class FalClient(BaseTool):
 
         payload = {"image_url": image_url, "prompt": prompt}
 
-        request_id, err = self._submit(endpoint, payload)
-        if err:
-            return ToolResult(success=False, error=err)
-
-        result, err = self._poll(endpoint, request_id)
+        result, err = self._submit_poll(endpoint, payload)
         if err:
             return ToolResult(success=False, error=err)
 
@@ -228,16 +250,52 @@ class FalClient(BaseTool):
 
         payload = {"prompt": prompt}
 
-        request_id, err = self._submit(endpoint, payload)
-        if err:
-            return ToolResult(success=False, error=err)
-
-        result, err = self._poll(endpoint, request_id)
+        result, err = self._submit_poll(endpoint, payload)
         if err:
             return ToolResult(success=False, error=err)
 
         images = (result or {}).get("images") or []
         img_url = images[0].get("url") if images else None
+        if not img_url:
+            return ToolResult(success=False, error=f"No image URL in fal result: {result}")
+
+        err = self._download(img_url, dest_path)
+        if err:
+            return ToolResult(success=False, error=err)
+
+        return ToolResult(success=True, data={"local_path": dest_path, "image_url": img_url})
+
+    def _image_generate(self, params: dict) -> ToolResult:
+        """
+        Generate an image from a prompt with optional multi-reference conditioning —
+        used for Nano Banana (Gemini image) keyframe stills. When image_urls are given,
+        the model edits/conditions on those references (character + style lock); with
+        none, it's pure text-to-image.
+
+        params:
+          endpoint     str        e.g. "fal-ai/nano-banana/edit"
+          prompt       str
+          image_urls   list[str]  optional data URIs / https URLs of reference images
+          aspect_ratio str        optional, e.g. "9:16"
+          dest_path    str        local path to save the result image
+        """
+        endpoint = params["endpoint"]
+        prompt = params.get("prompt", "")
+        image_urls = params.get("image_urls") or []
+        dest_path = params["dest_path"]
+
+        payload: dict = {"prompt": prompt, "num_images": 1}
+        if image_urls:
+            payload["image_urls"] = image_urls
+        if params.get("aspect_ratio"):
+            payload["aspect_ratio"] = params["aspect_ratio"]
+
+        result, err = self._submit_poll(endpoint, payload)
+        if err:
+            return ToolResult(success=False, error=err)
+
+        images = (result or {}).get("images") or []
+        img_url = images[0].get("url") if images else (result or {}).get("image", {}).get("url")
         if not img_url:
             return ToolResult(success=False, error=f"No image URL in fal result: {result}")
 
@@ -259,11 +317,7 @@ class FalClient(BaseTool):
         image_url = params["image_url"]
         dest_path = params["dest_path"]
 
-        request_id, err = self._submit(endpoint, {"image_url": image_url})
-        if err:
-            return ToolResult(success=False, error=err)
-
-        result, err = self._poll(endpoint, request_id)
+        result, err = self._submit_poll(endpoint, {"image_url": image_url})
         if err:
             return ToolResult(success=False, error=err)
 
@@ -303,11 +357,7 @@ class FalClient(BaseTool):
             "category": category,
         }
 
-        request_id, err = self._submit(endpoint, payload)
-        if err:
-            return ToolResult(success=False, error=err)
-
-        result, err = self._poll(endpoint, request_id)
+        result, err = self._submit_poll(endpoint, payload)
         if err:
             return ToolResult(success=False, error=err)
 

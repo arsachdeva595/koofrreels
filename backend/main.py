@@ -13,6 +13,15 @@ from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
+# Load .env for local runs (on the deploy server systemd already provides these via
+# EnvironmentFile). Must run before backend.config, which reads env at import.
+# Existing env vars win (override=False), so shell/systemd values take precedence.
+try:
+    from dotenv import load_dotenv
+    load_dotenv(Path(__file__).resolve().parent.parent / ".env")
+except Exception:
+    pass
+
 from backend.config import MUSIC_LIBRARY_PATH, UPLOADS_DIR
 from backend.job_manager import JobStatus, job_manager
 from backend.pipeline_runner import run_pipeline
@@ -20,7 +29,8 @@ from backend.meme_runner import run_meme_pipeline
 from backend.audio_runner import run_audio_pipeline
 from backend.stock_runner import run_stock_pipeline
 from backend.studio_runner import run_studio_pipeline
-from backend.ai_runner import run_ai_pipeline
+from backend.ai_runner import run_ai_pipeline, regenerate_cinematic_keyframe
+from starlette.concurrency import run_in_threadpool
 from backend.studio_constants import MODEL_LIBRARY
 from backend import settings_manager, queue_manager
 from tools.koofr.koofr_browser import KoofrBrowser
@@ -139,6 +149,15 @@ class SettingsUpdate(BaseModel):
     google_credentials_path: str | None = None
     veo_standard_model: str | None = None
     veo_reference_model: str | None = None
+    ai_video_provider: str | None = None
+    fal_video_endpoint: str | None = None
+    wavespeed_video_model: str | None = None
+    cinematic_keyframe_provider: str | None = None
+    cinematic_keyframe_endpoint: str | None = None
+    cinematic_keyframe_google_model: str | None = None
+    cinematic_keyframe_wavespeed_model: str | None = None
+    cinematic_chaining_strategy: str | None = None
+    cinematic_shot_seconds: float | None = None
 
 
 @app.post("/api/settings")
@@ -482,7 +501,7 @@ class AIGenerateRequest(BaseModel):
     include_voiceover: bool = True
     use_brand_guidelines: bool = True
     text_hints: str | None = None
-    reel_type: str = "story"                      # "story" | "character" | "none" | "product"
+    reel_type: str = "story"                      # "story" | "character" | "none" | "product" | "ugc" | "cinematic"
     character_image_path: str | None = None
     product_image_path: str | None = None         # product mode — anchors hero scenes
     keyframe_paths: list[str] | None = None
@@ -515,6 +534,41 @@ async def approve_ai(job_id: str, body: ApprovalRequest):
         raise HTTPException(status_code=400, detail=f"Job is not awaiting approval (status: {job.status})")
     job.submit_approval(body.model_dump(exclude_none=True))
     return {"ok": True}
+
+
+@app.get("/api/ai/keyframe/{job_id}/{filename}")
+async def serve_ai_keyframe(job_id: str, filename: str):
+    """Serve a cinematic keyframe still for the continuity review modal."""
+    job = job_manager.get(job_id)
+    ctx = getattr(job, "cinematic_ctx", None) if job else None
+    if not ctx:
+        raise HTTPException(status_code=404, detail="No keyframes for this job")
+    kf_dir = Path(ctx["keyframes_dir"]).resolve()
+    target = (kf_dir / filename).resolve()
+    # Path-traversal guard: target must stay inside the keyframes dir.
+    if kf_dir not in target.parents or not target.exists():
+        raise HTTPException(status_code=404, detail="Keyframe not found")
+    return FileResponse(path=str(target), media_type="image/png")
+
+
+class RegenerateKeyframeRequest(BaseModel):
+    kf_id: str
+    image_prompt: str | None = None
+
+
+@app.post("/ai/{job_id}/regenerate-keyframe")
+async def regenerate_ai_keyframe(job_id: str, body: RegenerateKeyframeRequest):
+    """Reshoot a single cinematic keyframe during the continuity gate (C6)."""
+    job = job_manager.get(job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+    if job.status != JobStatus.AWAITING_APPROVAL:
+        raise HTTPException(status_code=400, detail="Job is not at the continuity gate")
+    try:
+        updated = await run_in_threadpool(regenerate_cinematic_keyframe, job, body.kf_id, body.image_prompt)
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
+    return {"ok": True, "keyframe": updated}
 
 
 @app.post("/api/ai/upload-image")

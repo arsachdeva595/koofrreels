@@ -169,19 +169,26 @@ def build_positioned_voiceover(
         td = clip.get("transition_duration", 0.4) if i < len(normalized_clips) - 1 else 0.0
         current_time += dur - td
 
-    # Step 2: map scene_num → start_time and clip_duration using cut order as the index
+    # Step 2: group cuts BY SCENE — a scene may span several clips (multi-clip, when
+    # its narration is longer than one model clip). Each scene's start = its FIRST
+    # cut's start; its available VO window = the SUM of all its cuts' durations. This
+    # is what stops the voiceover from being chopped: the window is the scene's whole
+    # visual span, not just one clip. For one-clip-per-scene (e.g. Koofr) this is
+    # identical to the old per-clip behaviour.
     scene_start_times: dict[int, float] = {}
-    scene_clip_durations: dict[int, float] = {}
+    scene_total_durations: dict[int, float] = {}
     for i, cut in enumerate(cuts_ordered):
         if i < len(cut_start_times):
             scene_num = cut.get("scene") or (i + 1)
-            scene_start_times[scene_num] = round(cut_start_times[i], 3)
-            scene_clip_durations[scene_num] = cut_clip_durations[i]
+            if scene_num not in scene_start_times:
+                scene_start_times[scene_num] = round(cut_start_times[i], 3)
+                scene_total_durations[scene_num] = 0.0
+            scene_total_durations[scene_num] += cut_clip_durations[i]
 
     # Step 3: build (path, delay_ms, max_dur) — skip any VO whose scene has no clip.
     # Never default to delay=0: that causes all missing-scene VOs to overlap scene 1.
-    # Also cap each VO to its clip's duration: ElevenLabs often generates speech longer
-    # than the clip, which bleeds into the next scene and creates gibberish.
+    # max_dur = the scene's full visual span, so speech only bleeds if it genuinely
+    # exceeds the visuals allotted to that scene (with multi-clip it no longer does).
     valid: list[tuple[str, int, float]] = []  # (path, delay_ms, max_dur)
     for scene_num, vo_path in sorted(scene_vo_files.items()):
         if not Path(vo_path).exists():
@@ -189,7 +196,7 @@ def build_positioned_voiceover(
         if scene_num not in scene_start_times:
             continue  # clip for this scene is missing — skip rather than play at t=0
         delay_ms = int(scene_start_times[scene_num] * 1000)
-        max_dur = scene_clip_durations[scene_num]
+        max_dur = scene_total_durations[scene_num]
         valid.append((vo_path, delay_ms, max_dur))
 
     if not valid:

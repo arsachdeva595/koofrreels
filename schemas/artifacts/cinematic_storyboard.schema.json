@@ -1,0 +1,59 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "cinematic_storyboard",
+  "description": "Director output for the Cinematic keyframe-driven reel type. One global style_lock plus an array of per-shot cinematography contracts. A normalized scenes[] array (compatible with the existing storyboard shape) is carried alongside so downstream stages and the approval modal keep working.",
+  "type": "object",
+  "required": ["version", "style_lock", "aspect_ratio", "shots"],
+  "properties": {
+    "version": { "type": "string" },
+    "theme": { "type": "string" },
+    "style_lock": {
+      "type": "string",
+      "description": "Authored ONCE; appended verbatim to every image_prompt and video_prompt. Must not vary per shot.",
+      "minLength": 1
+    },
+    "reference_image": { "type": ["string", "null"] },
+    "aspect_ratio": { "type": "string", "enum": ["9:16", "16:9", "1:1", "4:5"] },
+    "shots": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": [
+          "kf_id", "duration_sec", "shot_type", "lens_mm", "dof",
+          "camera_move", "image_prompt", "video_prompt", "transition_out",
+          "needs_end_frame"
+        ],
+        "properties": {
+          "kf_id": { "type": "string" },
+          "duration_sec": { "type": "number", "minimum": 0.5, "maximum": 8 },
+          "shot_type": {
+            "type": "string",
+            "enum": ["ELS", "LS", "MLS", "MS", "MCU", "CU", "ECU", "Low", "High", "Insert"]
+          },
+          "lens_mm": { "type": "number", "minimum": 8, "maximum": 400 },
+          "dof": { "type": "string", "enum": ["shallow", "medium", "deep"] },
+          "camera_move": {
+            "type": "string",
+            "enum": ["locked", "push", "pull", "pan", "track", "orbit", "gimbal"]
+          },
+          "image_prompt": { "type": "string", "minLength": 1 },
+          "video_prompt": { "type": "string", "minLength": 1 },
+          "vo_text": { "type": "string" },
+          "overlay_text": { "type": "string" },
+          "speaking_on_camera": { "type": "boolean" },
+          "transition_out": { "type": "string", "enum": ["cut", "dissolve", "match_cut"] },
+          "needs_end_frame": { "type": "boolean" },
+          "end_image_prompt": { "type": ["string", "null"] }
+        },
+        "additionalProperties": true
+      }
+    },
+    "scenes": {
+      "type": "array",
+      "description": "Normalized per-shot view in the existing storyboard scene shape, so the approval modal / VO / edit stages run unchanged.",
+      "items": { "type": "object" }
+    }
+  },
+  "additionalProperties": true
+}

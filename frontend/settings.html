@@ -471,14 +471,129 @@
 
         <div class="field">
           <label>Standard Veo Model <span style="color:#555">(AI Reels — Story / Character / No-Characters / Product)</span></label>
-          <input type="text" id="veo_standard_model" placeholder="veo-3.1-lite-generate-001" />
-          <div class="hint">The Veo model used to generate clips for all AI Reel types except UGC. Paste any model ID enabled in your Vertex project (e.g. <code>veo-3.1-lite-generate-001</code>, <code>veo-3.1-generate-001</code>). Use just the bare model ID — not the full <code>publishers/google/models/…</code> path.</div>
+          <select id="veo_standard_model_select" onchange="bindModel('veo_standard_model_select','veo_standard_model')">
+            <option value="veo-3.1-lite-generate-001">Veo 3.1 Lite — fast &amp; cheap (default)</option>
+            <option value="veo-3.1-generate-001">Veo 3.1 — higher quality</option>
+            <option value="veo-2.0-generate-001">Veo 2</option>
+            <option value="__custom__">Custom — enter model ID…</option>
+          </select>
+          <input type="text" id="veo_standard_model" placeholder="veo-3.1-lite-generate-001" style="margin-top:8px;display:none" />
+          <div class="hint">Veo model for all AI Reel types except UGC (used when the video provider is Google). Must be enabled in your Vertex project. Pick a preset or Custom for any bare model ID (not the full <code>publishers/google/…</code> path).</div>
         </div>
 
         <div class="field">
           <label>UGC Reference Model <span style="color:#555">(for AI Reels → UGC only)</span></label>
-          <input type="text" id="veo_reference_model" placeholder="veo-3.1-generate-001" />
-          <div class="hint">The reference-capable Veo&nbsp;3.1 model used for UGC (creator + product in one shot). Must be <strong>enabled in your Vertex project's Model Garden</strong>. Try <code>veo-3.1-generate-001</code>; if that 404s, open Model Garden, enable Veo&nbsp;3.1, and paste the exact model ID shown on its card. The Veo&nbsp;3.1 <em>lite</em> model does not support reference images.</div>
+          <select id="veo_reference_model_select" onchange="bindModel('veo_reference_model_select','veo_reference_model')">
+            <option value="veo-3.1-generate-001">Veo 3.1 — reference-capable</option>
+            <option value="__custom__">Custom — enter model ID…</option>
+          </select>
+          <input type="text" id="veo_reference_model" placeholder="veo-3.1-generate-001" style="margin-top:8px;display:none" />
+          <div class="hint">Reference-capable Veo&nbsp;3.1 model for UGC (creator + product in one shot). Must be <strong>enabled in your Vertex Model Garden</strong>. Veo&nbsp;3.1 <em>lite</em> does not support reference images.</div>
+        </div>
+
+        <div class="field">
+          <label>Cinematic — Keyframe Provider <span style="color:#555">(stills / image model)</span></label>
+          <select id="cinematic_keyframe_provider" onchange="onKfProviderChange()">
+            <option value="fal">fal.ai (Nano Banana, FLUX)</option>
+            <option value="google">Google Cloud — Gemini Image (uses your Vertex)</option>
+            <option value="wavespeed">WaveSpeed</option>
+          </select>
+          <div class="hint">Which platform generates the keyframe stills. <strong>Google</strong> runs the same Nano Banana (Gemini 2.5 Flash Image) on your Vertex — no fal markup. Reference-conditioning (character lock) is strongest on Nano Banana.</div>
+        </div>
+
+        <div class="field" id="kf-fal-field" style="display:none">
+          <label>Keyframe Model <span style="color:#555">(fal image)</span></label>
+          <select id="cinematic_keyframe_endpoint_select" onchange="bindModel('cinematic_keyframe_endpoint_select','cinematic_keyframe_endpoint')">
+            <option value="fal-ai/nano-banana/edit">Nano Banana — edit (default)</option>
+            <option value="fal-ai/nano-banana-pro/edit">Nano Banana Pro — edit (higher quality)</option>
+            <option value="fal-ai/flux-pro/kontext">FLUX Pro Kontext — image edit</option>
+            <option value="__custom__">Custom — enter fal endpoint…</option>
+          </select>
+          <input type="text" id="cinematic_keyframe_endpoint" placeholder="fal-ai/nano-banana/edit" style="margin-top:8px;display:none" />
+          <div class="hint">fal image model. Nano Banana (Gemini image) recommended; Pro is higher quality.</div>
+        </div>
+
+        <div class="field" id="kf-google-field" style="display:none">
+          <label>Keyframe Model <span style="color:#555">(Google Vertex image)</span></label>
+          <select id="cinematic_keyframe_google_model_select" onchange="bindModel('cinematic_keyframe_google_model_select','cinematic_keyframe_google_model')">
+            <option value="gemini-2.5-flash-image">Gemini 2.5 Flash Image (Nano Banana)</option>
+            <option value="imagen-3.0-generate-002">Imagen 3</option>
+            <option value="__custom__">Custom — enter model ID…</option>
+          </select>
+          <input type="text" id="cinematic_keyframe_google_model" placeholder="gemini-2.5-flash-image" style="margin-top:8px;display:none" />
+          <div class="hint">Must be enabled in your Vertex project. Gemini 2.5 Flash Image is the same "Nano Banana" — no fal markup. <em>Experimental</em> — verify it's available in your region.</div>
+        </div>
+
+        <div class="field" id="kf-wavespeed-field" style="display:none">
+          <label>Keyframe Model <span style="color:#555">(WaveSpeed image)</span></label>
+          <select id="cinematic_keyframe_wavespeed_model_select" onchange="bindModel('cinematic_keyframe_wavespeed_model_select','cinematic_keyframe_wavespeed_model')">
+            <option value="google/nano-banana-pro/edit">Nano Banana Pro (edit) — best for character lock</option>
+            <option value="google/nano-banana-2/edit">Nano Banana 2 (edit)</option>
+            <option value="bytedance/seedream-v5.0-pro/edit">Seedream V5 Pro (edit)</option>
+            <option value="alibaba/wan-2.7/image-edit-pro">WAN 2.7 Image Edit Pro</option>
+            <option value="__custom__">Custom — enter model slug…</option>
+          </select>
+          <input type="text" id="cinematic_keyframe_wavespeed_model" placeholder="google/nano-banana-pro/edit" style="margin-top:8px;display:none" />
+          <div class="hint">WaveSpeed image-edit model. Nano Banana edit is the same model used on fal/Google — best for character lock. <em>Needs live test</em> (add a WaveSpeed key). Slugs from wavespeed.ai/models.</div>
+        </div>
+
+        <div class="field">
+          <label>Cinematic — Character Lock <span style="color:#555">(still consistency)</span></label>
+          <select id="cinematic_chaining_strategy">
+            <option value="sheet">Character sheet first (recommended)</option>
+            <option value="chain">Chain (each still conditions the next)</option>
+            <option value="none">None (reference only)</option>
+          </select>
+          <div class="hint">How character/wardrobe consistency is held across stills. "Sheet" generates one character sheet and conditions every still on it.</div>
+        </div>
+
+        <div class="field">
+          <label>Cinematic — Shot length <span style="color:#555">(seconds per shot)</span></label>
+          <input type="number" id="cinematic_shot_seconds" min="2" max="8" step="0.5" placeholder="5" />
+          <div class="hint">Target seconds per shot. Video bills per second at a ~5s floor per clip, so longer shots = fewer clips = less spend. ~5s uses the full clip; lower = more dynamic cutting but more cost.</div>
+        </div>
+
+        <hr style="border:none;border-top:1px solid #333;margin:18px 0" />
+
+        <div class="field">
+          <label>AI Video Model <span style="color:#555">(applies to ALL AI reels)</span></label>
+          <select id="ai_video_provider" onchange="onProviderChange()">
+            <option value="veo3">Google Cloud — Veo (uses your Vertex settings above)</option>
+            <option value="fal">fal.ai (Kling, Hailuo, WAN, …)</option>
+            <option value="wavespeed">WaveSpeed</option>
+          </select>
+          <div class="hint">Which model generates the clips for every AI reel type. fal &amp; WaveSpeed are image-to-video (need a keyframe/reference image); Google Veo also handles text-only scenes.</div>
+        </div>
+
+        <div class="field" id="fal-video-field" style="display:none">
+          <label>fal Video Model <span style="color:#555">(approx. cost — verify on the model page)</span></label>
+          <select id="fal_video_model_select" onchange="bindModel('fal_video_model_select','fal_video_endpoint')">
+            <option value="fal-ai/kling-video/v3/pro/image-to-video">Kling 3.0 Pro — top quality (~$0.12/s)</option>
+            <option value="fal-ai/kling-video/v2.6/pro/image-to-video">Kling 2.6 Pro (~$0.10/s)</option>
+            <option value="fal-ai/kling-video/v2.1/pro/image-to-video">Kling 2.1 Pro (~$0.098/s)</option>
+            <option value="fal-ai/kling-video/v2.1/standard/image-to-video">Kling 2.1 Standard — value (~$0.045/s)</option>
+            <option value="fal-ai/minimax/hailuo-02/standard/image-to-video">MiniMax Hailuo 02 (~$0.045/s)</option>
+            <option value="fal-ai/pixverse/v6/image-to-video">PixVerse V6 (~$0.04/s)</option>
+            <option value="fal-ai/wan-i2v">WAN i2v — cheap & fast (~$0.03/s)</option>
+            <option value="bytedance/seedance-2.0/image-to-video">Seedance 2 (~$0.05/s)</option>
+            <option value="__custom__">Custom — enter endpoint manually…</option>
+          </select>
+          <div class="hint">Rates are rough mid-2026 estimates — confirm exact pricing on the model's fal page. Kling Pro is premium; Standard / WAN / PixVerse cut cost a lot for drafts. First-last-frame interpolation works on Kling.</div>
+          <input type="text" id="fal_video_endpoint" placeholder="fal-ai/kling-video/v2.1/pro/image-to-video" style="margin-top:8px;display:none" />
+        </div>
+
+        <div class="field" id="wavespeed-video-field" style="display:none">
+          <label>WaveSpeed Video Model</label>
+          <select id="wavespeed_video_model_select" onchange="bindModel('wavespeed_video_model_select','wavespeed_video_model')">
+            <option value="bytedance/seedance-2.0/image-to-video">Seedance 2.0 (start+end frame)</option>
+            <option value="bytedance/seedance-2.0-fast/image-to-video">Seedance 2.0 Fast</option>
+            <option value="vidu/q3/image-to-video">Vidu Q3</option>
+            <option value="vidu/q3-turbo/image-to-video">Vidu Q3 Turbo</option>
+            <option value="alibaba/happyhorse-1.1/reference-to-video">HappyHorse 1.1 (reference-to-video)</option>
+            <option value="__custom__">Custom — enter model slug…</option>
+          </select>
+          <input type="text" id="wavespeed_video_model" placeholder="bytedance/seedance-2.0/image-to-video" style="margin-top:8px;display:none" />
+          <div class="hint">WaveSpeed image-to-video model. Slugs verified against wavespeed.ai/models. Use Custom for any other slug.</div>
         </div>
 
         <button class="btn-save" onclick="saveApiKeys()">Save API Keys</button>
@@ -767,8 +882,21 @@ Short. 1-2 lines max. Example:
         setVal('vertex_project_id', settings.vertex_project_id || '');
         setVal('vertex_location', settings.vertex_location || 'us-central1');
         setVal('google_credentials_path', settings.google_credentials_path || '');
-        setVal('veo_standard_model', settings.veo_standard_model || '');
-        setVal('veo_reference_model', settings.veo_reference_model || '');
+        setVal('cinematic_chaining_strategy', settings.cinematic_chaining_strategy || 'sheet');
+        setVal('cinematic_shot_seconds', settings.cinematic_shot_seconds || 5);
+        setVal('ai_video_provider', settings.ai_video_provider || 'veo3');
+        // Model dropdowns (each: select + a Custom text input) — map saved value to a
+        // preset option, else fall back to Custom with the raw value.
+        loadModel('veo_standard_model_select', 'veo_standard_model', settings.veo_standard_model || '');
+        loadModel('veo_reference_model_select', 'veo_reference_model', settings.veo_reference_model || '');
+        loadModel('cinematic_keyframe_endpoint_select', 'cinematic_keyframe_endpoint', settings.cinematic_keyframe_endpoint || '');
+        loadModel('cinematic_keyframe_google_model_select', 'cinematic_keyframe_google_model', settings.cinematic_keyframe_google_model || '');
+        loadModel('cinematic_keyframe_wavespeed_model_select', 'cinematic_keyframe_wavespeed_model', settings.cinematic_keyframe_wavespeed_model || '');
+        loadModel('fal_video_model_select', 'fal_video_endpoint', settings.fal_video_endpoint || '');
+        loadModel('wavespeed_video_model_select', 'wavespeed_video_model', settings.wavespeed_video_model || '');
+        setVal('cinematic_keyframe_provider', settings.cinematic_keyframe_provider || 'fal');
+        onProviderChange();
+        onKfProviderChange();
 
         // Koofr tab
         setVal('koofr_default_folder', settings.koofr_default_folder || '/');
@@ -804,17 +932,62 @@ Short. 1-2 lines max. Example:
       if (el) el.checked = !!val;
     }
 
+    // ── Model dropdowns (generic: a <select> + a Custom text input) ───────────────
+    // Every model setting is a curated dropdown; picking "Custom…" reveals a text box.
+    const MODEL_SELECTS = [
+      ['veo_standard_model_select', 'veo_standard_model'],
+      ['veo_reference_model_select', 'veo_reference_model'],
+      ['cinematic_keyframe_endpoint_select', 'cinematic_keyframe_endpoint'],
+      ['cinematic_keyframe_google_model_select', 'cinematic_keyframe_google_model'],
+      ['cinematic_keyframe_wavespeed_model_select', 'cinematic_keyframe_wavespeed_model'],
+      ['fal_video_model_select', 'fal_video_endpoint'],
+      ['wavespeed_video_model_select', 'wavespeed_video_model'],
+    ];
+    function bindModel(selectId, inputId) {
+      const sel = document.getElementById(selectId), inp = document.getElementById(inputId);
+      if (!sel || !inp) return;
+      const custom = sel.value === '__custom__';
+      inp.style.display = custom ? '' : 'none';
+      if (!custom) inp.value = sel.value;   // a curated pick becomes the saved value
+    }
+    function loadModel(selectId, inputId, val) {
+      const sel = document.getElementById(selectId), inp = document.getElementById(inputId);
+      if (!sel || !inp) return;
+      const known = Array.from(sel.options).some(o => o.value === val);
+      sel.value = (val && known) ? val : (val ? '__custom__' : sel.options[0].value);
+      inp.value = val || '';
+      bindModel(selectId, inputId);
+    }
+    function onProviderChange() {
+      const p = document.getElementById('ai_video_provider').value;
+      document.getElementById('fal-video-field').style.display = (p === 'fal') ? '' : 'none';
+      document.getElementById('wavespeed-video-field').style.display = (p === 'wavespeed') ? '' : 'none';
+    }
+    function onKfProviderChange() {
+      const p = document.getElementById('cinematic_keyframe_provider').value;
+      document.getElementById('kf-fal-field').style.display = (p === 'fal') ? '' : 'none';
+      document.getElementById('kf-google-field').style.display = (p === 'google') ? '' : 'none';
+      document.getElementById('kf-wavespeed-field').style.display = (p === 'wavespeed') ? '' : 'none';
+    }
+
     // ── Save API Keys ───────────────────────────────────────────────────────────
     async function saveApiKeys() {
+      MODEL_SELECTS.forEach(([s, i]) => bindModel(s, i));  // sync each input to its pick
       const body = {};
       const fields = ['koofr_email', 'koofr_app_password', 'anthropic_api_key',
                       'publer_api_key', 'publer_workspace_id', 'pexels_api_key',
                       'elevenlabs_api_key', 'elevenlabs_voice_id',
                       'fal_api_key', 'wavespeed_api_key',
                       'vertex_project_id', 'vertex_location', 'google_credentials_path',
-                      'veo_standard_model', 'veo_reference_model'];
+                      'veo_standard_model', 'veo_reference_model',
+                      'ai_video_provider', 'fal_video_endpoint', 'wavespeed_video_model',
+                      'cinematic_keyframe_provider', 'cinematic_keyframe_endpoint',
+                      'cinematic_keyframe_google_model', 'cinematic_keyframe_wavespeed_model',
+                      'cinematic_chaining_strategy', 'cinematic_shot_seconds'];
       fields.forEach(f => {
-        const v = document.getElementById(f).value.trim();
+        const el = document.getElementById(f);
+        if (!el) return;
+        const v = el.value.trim();
         if (v && v !== '••••••••') body[f] = v;
       });
       await saveSettings(body, 'API keys saved!');

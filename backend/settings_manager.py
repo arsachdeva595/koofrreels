@@ -32,6 +32,27 @@ _DEFAULTS: dict[str, Any] = {
     # Reference-capable Veo 3.1 model for UGC mode (creator + product in one shot).
     # Must be enabled in the project's Vertex Model Garden.
     "veo_reference_model": "veo-3.1-generate-001",
+    # ── AI Reels — video model (applies to ALL AI reel types) ──────────────────
+    # Which model turns a prompt/keyframe into a clip. "veo3" uses Google Vertex
+    # (veo_standard_model + vertex_*); "fal"/"wavespeed" use the endpoints below and
+    # take a first-frame image. Endpoints are entered manually.
+    "ai_video_provider": "veo3",   # veo3 | fal | wavespeed
+    "fal_video_endpoint": "fal-ai/kling-video/v2.1/pro/image-to-video",
+    "wavespeed_video_model": "bytedance/seedance-2.0/image-to-video",
+    # ── Cinematic reel type ────────────────────────────────────────────────────
+    # Keyframe stills provider + model. "fal" (Nano Banana etc.), "google" (Gemini
+    # image = Nano Banana, on your Vertex — no fal markup), or "wavespeed".
+    "cinematic_keyframe_provider": "fal",   # fal | google | wavespeed
+    "cinematic_keyframe_endpoint": "fal-ai/nano-banana/edit",       # fal image endpoint
+    "cinematic_keyframe_google_model": "gemini-2.5-flash-image",    # Vertex image model
+    "cinematic_keyframe_wavespeed_model": "google/nano-banana-pro/edit",  # WaveSpeed image model
+    # Character-lock strategy (C1): "sheet" = generate one character sheet first and
+    # condition every still on it; "chain" = feed the prior still into the next;
+    # "none" = condition only on the original reference.
+    "cinematic_chaining_strategy": "sheet",
+    # Target seconds per shot. Video bills per second at a 5s floor per clip, so fewer/
+    # longer shots = fewer clips billed = less waste. ~5s ≈ uses the full clip.
+    "cinematic_shot_seconds": 5.0,
     # Koofr
     "koofr_default_folder": "/",
     # Brand voice (markdown string)

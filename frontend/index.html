@@ -564,6 +564,22 @@
     }
     .btn-publer:hover { background: #1e1b4b; }
     .btn-publer.show { display: flex; }
+    .btn-review {
+      flex: 1;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      padding: 11px;
+      background: var(--bg3);
+      color: var(--text2);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+    .btn-review:hover { background: #222; }
 
     /* ── Modals ──────────────────────────────────────────────────────────────── */
     .modal-overlay {
@@ -591,9 +607,39 @@
     .modal label:first-of-type { margin-top: 0; }
     .modal-actions { display: flex; gap: 10px; margin-top: 20px; }
 
-    /* Approval modal */
-    .modal-approval { max-width: 600px; }
+    /* Approval modal — responsive: pinned header + scrollable body + pinned footer */
+    .modal-approval {
+      max-width: 640px;
+      max-height: calc(100vh - 40px);
+      padding: 0;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
     .modal-approval h3 { color: var(--purple-text); }
+    .modal-approval .modal-head { padding: 22px 24px 0; flex: 0 0 auto; }
+    .modal-approval .modal-head p { margin-bottom: 14px; }
+    .modal-approval .approval-tabs { margin-bottom: 0; flex-wrap: wrap; }
+    .approval-scroll {
+      flex: 1 1 auto;
+      min-height: 0;
+      overflow-y: auto;
+      padding: 16px 24px 6px;
+    }
+    .modal-approval .modal-actions {
+      flex: 0 0 auto;
+      margin: 0;
+      padding: 14px 24px;
+      border-top: 1px solid var(--border);
+      background: #181818;
+    }
+    .modal-approval input,
+    .modal-approval textarea,
+    .modal-approval select { width: 100%; box-sizing: border-box; }
+    @media (max-width: 640px) {
+      .modal-overlay { padding: 0; }
+      .modal-approval { max-width: 100%; max-height: 100vh; border-radius: 0; border: none; }
+    }
 
     .approval-tabs {
       display: flex;
@@ -628,7 +674,7 @@
     .script-section label:first-child { margin-top: 0; }
 
     /* Scene flow tab */
-    .scene-list { display: flex; flex-direction: column; gap: 6px; max-height: 340px; overflow-y: auto; }
+    .scene-list { display: flex; flex-direction: column; gap: 6px; }
     .scene-item {
       display: flex; gap: 10px; align-items: flex-start;
       padding: 9px 10px;
@@ -1210,6 +1256,7 @@
         <button class="source-pill" id="ai-rpill-none" onclick="switchAIReelType('none')">🚫 No Characters</button>
         <button class="source-pill" id="ai-rpill-product" onclick="switchAIReelType('product')">🛍️ Product</button>
         <button class="source-pill" id="ai-rpill-ugc" onclick="switchAIReelType('ugc')">🗣️ UGC</button>
+        <button class="source-pill" id="ai-rpill-cinematic" onclick="switchAIReelType('cinematic')">🎬 Cinematic</button>
       </div>
     </div>
 
@@ -1280,6 +1327,19 @@
           <input type="file" id="ai-ugc-product-input" accept="image/*" style="display:none" onchange="handleUGCProductUpload(this)" />
         </div>
       </div>
+    </div>
+
+    <!-- Cinematic: one character reference + storyline → director shot-lists the sequence -->
+    <div id="ai-panel-cinematic" style="display:none">
+      <div class="section-label" style="margin-bottom:8px">Character Reference Image</div>
+      <div class="source-hint" style="margin-bottom:10px">
+        Upload <strong>one</strong> reference image of your character. A cinematographer-director shot-lists a 10–20s sequence (shot type, lens, depth of field, camera move, cuts) and the system <strong>generates its own keyframe stills</strong> — you don't upload them. Best at shorter durations.
+      </div>
+      <div id="ai-cine-drop" style="border:2px dashed #444;border-radius:8px;padding:16px;text-align:center;cursor:pointer;min-height:80px;display:flex;align-items:center;justify-content:center;flex-direction:column" onclick="document.getElementById('ai-cine-input').click()">
+        <span id="ai-cine-drop-label" style="color:#888;font-size:13px">Click to upload character image</span>
+        <img id="ai-cine-preview" style="display:none;max-height:120px;border-radius:6px;margin-top:8px" />
+      </div>
+      <input type="file" id="ai-cine-input" accept="image/*" style="display:none" onchange="handleAICineUpload(this)" />
     </div>
 
     <hr class="divider" />
@@ -1913,6 +1973,7 @@
         <div class="result-meta" id="result-meta"></div>
         <div class="result-actions">
           <a class="btn-download" id="btn-download" href="#" download="reel.mp4">↓ Download MP4</a>
+          <button class="btn-review" id="btn-review" onclick="openReviewModal()" style="display:none">📋 Review inputs &amp; cost</button>
           <button class="btn-publer" id="btn-publer" onclick="openPublerModal()">📤 Push to Publer</button>
         </div>
       </div>
@@ -1923,33 +1984,64 @@
 <!-- ── Approval modal ───────────────────────────────────────────────────────── -->
 <div class="modal-overlay" id="approval-modal">
   <div class="modal modal-approval">
-    <h3>✦ Review &amp; Approve Plan</h3>
-    <p>Claude planned your reel. Review the script, scene order, and settings — edit anything before rendering starts.</p>
+    <div class="modal-head">
+      <h3>✦ Review &amp; Approve Plan</h3>
+      <p>Claude planned your reel. Review the script, scene order, and settings — edit anything before rendering starts.</p>
 
-    <div class="approval-tabs">
-      <button class="atab active" onclick="switchApprovalTab('script', this)">Scenes &amp; Script</button>
-      <button class="atab" onclick="switchApprovalTab('summary', this)">Summary</button>
-      <button class="atab" id="atab-policy-btn" onclick="switchApprovalTab('policy', this)" style="display:none">⚠ Policy Review</button>
+      <div class="approval-tabs">
+        <button class="atab active" onclick="switchApprovalTab('script', this)">Scenes &amp; Script</button>
+        <button class="atab" onclick="switchApprovalTab('summary', this)">Summary</button>
+        <button class="atab" id="atab-policy-btn" onclick="switchApprovalTab('policy', this)" style="display:none">⚠ Policy Review</button>
+        <button class="atab" id="atab-continuity-btn" onclick="switchApprovalTab('continuity', this)" style="display:none">🎞 Continuity Review</button>
+      </div>
     </div>
 
-    <!-- Tab: Scenes (editable per-scene script) -->
-    <div class="atab-panel active" id="atab-script">
-      <div class="scene-list" id="approval-scene-list"></div>
-    </div>
+    <div class="approval-scroll">
+      <!-- Tab: Scenes (editable per-scene script) -->
+      <div class="atab-panel active" id="atab-script">
+        <div class="scene-list" id="approval-scene-list"></div>
+      </div>
 
-    <!-- Tab: Summary -->
-    <div class="atab-panel" id="atab-summary">
-      <div class="summary-grid" id="approval-summary-grid"></div>
-    </div>
+      <!-- Tab: Summary -->
+      <div class="atab-panel" id="atab-summary">
+        <div class="summary-grid" id="approval-summary-grid"></div>
+      </div>
 
-    <!-- Tab: Policy Review (AI Reels only) -->
-    <div class="atab-panel" id="atab-policy">
-      <div id="approval-policy-list"></div>
+      <!-- Tab: Policy Review (AI Reels only) -->
+      <div class="atab-panel" id="atab-policy">
+        <div id="approval-policy-list"></div>
+      </div>
+
+      <!-- Tab: Continuity Review (Cinematic keyframe stills) -->
+      <div class="atab-panel" id="atab-continuity">
+        <div id="approval-continuity-list"></div>
+      </div>
     </div>
 
     <div class="modal-actions">
       <button class="btn-modal-cancel" onclick="cancelApproval()">Cancel</button>
       <button class="btn-modal-approve" onclick="submitApproval()">Approve &amp; Render ▶</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── Review inputs & cost modal ───────────────────────────────────────────── -->
+<div class="modal-overlay" id="review-modal">
+  <div class="modal modal-approval">
+    <div class="modal-head">
+      <h3>📋 Inputs &amp; Cost</h3>
+      <p>Exactly what was approved and what each AI model received, plus the estimated spend.</p>
+      <div class="approval-tabs">
+        <button class="atab active" onclick="switchReviewTab('cost', this)">Cost</button>
+        <button class="atab" onclick="switchReviewTab('inputs', this)">Inputs &amp; Prompts</button>
+      </div>
+    </div>
+    <div class="approval-scroll">
+      <div class="atab-panel active" id="rtab-cost"><div id="review-cost"></div></div>
+      <div class="atab-panel" id="rtab-inputs"><div id="review-inputs"></div></div>
+    </div>
+    <div class="modal-actions">
+      <button class="btn-modal-cancel" onclick="document.getElementById('review-modal').classList.remove('open')">Close</button>
     </div>
   </div>
 </div>
@@ -2021,6 +2113,18 @@
       { id: 'final_review',   label: 'Quality Review' },
       { id: 'deliver',        label: 'Ready!' },
     ],
+    ai_cinematic: [
+      { id: 'brief',               label: 'Processing Brief' },
+      { id: 'storyboard',          label: 'Cinematic Shot Plan' },
+      { id: 'keyframe_generation', label: 'Generating Keyframes' },
+      { id: 'continuity_qa',       label: 'Continuity Check' },
+      { id: 'clip_generation',     label: 'Generating Clips' },
+      { id: 'voiceover',           label: 'Generating Voiceover' },
+      { id: 'edit_decisions',      label: 'Planning the Edit' },
+      { id: 'compose',             label: 'Composing & Grading' },
+      { id: 'final_review',        label: 'Quality Review' },
+      { id: 'deliver',             label: 'Ready!' },
+    ],
     meme: [
       { id: 'brief',          label: 'Processing Brief' },
       { id: 'clip_selection', label: 'Fetching Clip' },
@@ -2046,7 +2150,10 @@
     ],
   };
 
-  function getStageDefs() { return STAGE_DEFS_MAP[currentTab] || STAGE_DEFS_MAP.reels; }
+  function getStageDefs() {
+    if (currentTab === 'ai' && aiReelType === 'cinematic') return STAGE_DEFS_MAP.ai_cinematic;
+    return STAGE_DEFS_MAP[currentTab] || STAGE_DEFS_MAP.reels;
+  }
 
   // ── Reels state ─────────────────────────────────────────────────────────────
   let currentMode = 'describe';
@@ -2374,6 +2481,9 @@
     document.querySelectorAll('.atab-panel').forEach(p => p.classList.remove('active'));
     btn.classList.add('active');
     document.getElementById('atab-' + id).classList.add('active');
+    // Reset the scrollable body to the top when switching tabs.
+    const scroll = document.querySelector('.approval-scroll');
+    if (scroll) scroll.scrollTop = 0;
   }
 
   function openApprovalModal(job) {
@@ -2384,18 +2494,37 @@
     const policyFlags = data.policy_flags || [];
 
     // Scenes & Script tab — one editable card per scene
+    const isCinematic = !!data.cinematic;
     const sceneList = document.getElementById('approval-scene-list');
+    // Cinematic: show the single global style_lock that anchors every shot.
+    const styleLockBanner = (isCinematic && data.style_lock) ? `
+      <div style="border:1px solid #2a2440;border-radius:8px;padding:10px 12px;margin-bottom:10px;background:#15131f">
+        <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--purple-text);margin-bottom:4px">🎬 Style lock — applied to every shot</div>
+        <div style="font-size:12px;color:var(--text3);line-height:1.5">${esc(data.style_lock)}</div>
+      </div>` : '';
     if (!scenes.length) {
       sceneList.innerHTML = '<p style="font-size:12px;color:var(--text4);padding:10px 0">No scene data generated.</p>';
     } else {
-      sceneList.innerHTML = scenes.map(s => `
+      sceneList.innerHTML = styleLockBanner + scenes.map(s => {
+        // Cinematography badges (Cinematic type only) — shot type / lens / DOF / move / cut.
+        const cineBadges = isCinematic ? [
+          s.kf_id ? `🎞 ${esc(s.kf_id)}` : '',
+          s.shot_type ? `🎥 ${esc(s.shot_type)}` : '',
+          s.lens_mm ? `🔭 ${esc(String(s.lens_mm))}mm` : '',
+          s.dof ? `◐ ${esc(s.dof)}` : '',
+          s.camera_move ? `↔ ${esc(s.camera_move)}` : '',
+          s.transition_out ? `✂ ${esc(s.transition_out)}` : '',
+          s.needs_end_frame ? '⇥ end-frame' : '',
+          s.speaking_on_camera ? '⚠ speaks on camera' : '',
+        ].filter(Boolean).map(b => `<span>${b}</span>`).join('') : '';
+        return `
         <div class="scene-item" style="flex-direction:column;gap:8px" data-scene="${s.scene}">
           <div style="display:flex;align-items:center;gap:10px">
             <div class="scene-num">${s.scene}</div>
             <div class="scene-body">
               <div class="scene-file" style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--purple-text)">${esc(s.role || '')}</div>
               <div class="scene-reason">${esc(s.visual_description || '')}</div>
-              <div class="scene-meta"><span>⏱ ${s.duration_seconds}s</span>${s.clip_hint ? `<span>🔍 ${esc(s.clip_hint)}</span>` : ''}</div>
+              <div class="scene-meta"><span>⏱ ${s.duration_seconds}s</span>${s.clip_hint && !isCinematic ? `<span>🔍 ${esc(s.clip_hint)}</span>` : ''}${cineBadges}</div>
             </div>
           </div>
           <div style="padding-left:30px;display:flex;flex-direction:column;gap:6px">
@@ -2408,7 +2537,8 @@
               placeholder="Spoken narration for scene ${s.scene}…"
               style="font-size:12px;padding:7px 10px;resize:vertical">${esc(s.voiceover || '')}</textarea>
           </div>
-        </div>`).join('');
+        </div>`;
+      }).join('');
     }
 
     // Summary tab
@@ -2453,8 +2583,90 @@
       policyList.innerHTML = '';
     }
 
-    switchApprovalTab('script', document.querySelector('.atab'));
+    // Continuity Review tab — Cinematic keyframe stills (drift gate before video spend)
+    const contBtn = document.getElementById('atab-continuity-btn');
+    const approveBtn = document.querySelector('.btn-modal-approve');
+    if (data.continuity) {
+      contBtn.style.display = '';
+      const fc = data.flagged_count || 0;
+      contBtn.textContent = fc ? `🎞 Continuity Review (${fc})` : '🎞 Continuity Review';
+      renderContinuity(data);
+      if (approveBtn) approveBtn.textContent = 'Approve Stills ▶';
+    } else {
+      contBtn.style.display = 'none';
+      document.getElementById('approval-continuity-list').innerHTML = '';
+      if (approveBtn) approveBtn.textContent = 'Approve & Render ▶';
+    }
+
+    // Open straight to the continuity tab when there are stills to review.
+    if (data.continuity) {
+      switchApprovalTab('continuity', document.getElementById('atab-continuity-btn'));
+    } else {
+      switchApprovalTab('script', document.querySelector('.atab'));
+    }
     document.getElementById('approval-modal').classList.add('open');
+  }
+
+  const _CONT_SEV_COLOR = { ok: '#1c7a3e', warn: '#c0510a', fail: '#b3261e' };
+  const _CONT_SEV_LABEL = { ok: '✓ consistent', warn: '⚠ minor drift', fail: '✕ drift' };
+
+  function renderContinuity(data) {
+    const list = document.getElementById('approval-continuity-list');
+    const kfs = data.keyframes || [];
+    const intro = `<div style="padding:10px 0 8px;font-size:12px;color:var(--text3);line-height:1.6">
+      Each still is checked against your reference for character/wardrobe drift <strong>before</strong> any video credits are spent.
+      Reshoot a flagged still here — it's cheap. Edit its prompt first if you want to steer it.</div>`;
+    list.innerHTML = intro + kfs.map(k => {
+      const v = k.verdict || {};
+      const sev = v.severity || (k.success ? 'ok' : 'fail');
+      const issues = (v.issues || []).map(i => `<li>${esc(i)}</li>`).join('');
+      const imgUrl = k.success ? `${API}/api/ai/keyframe/${currentJobId}/${k.filename}?t=${Date.now()}` : '';
+      return `<div class="cont-item" data-kf="${k.kf_id}" style="display:flex;gap:12px;border:1px solid #2a2a32;border-radius:8px;padding:10px;margin-bottom:10px">
+        <img id="cont-img-${k.kf_id}" src="${imgUrl}" style="width:90px;height:160px;object-fit:cover;border-radius:6px;background:#111;flex-shrink:0" />
+        <div style="flex:1;display:flex;flex-direction:column;gap:6px">
+          <div style="display:flex;align-items:center;gap:8px">
+            <span style="font-weight:700;font-size:12px">${esc(k.kf_id)}</span>
+            <span style="font-size:11px;color:var(--text4)">scene ${k.scene}</span>
+            <span id="cont-sev-${k.kf_id}" style="background:${_CONT_SEV_COLOR[sev] || '#666'};color:#fff;border-radius:4px;padding:2px 7px;font-size:10px;font-weight:700">${_CONT_SEV_LABEL[sev] || esc(sev)}</span>
+          </div>
+          <ul id="cont-issues-${k.kf_id}" style="margin:0;padding-left:16px;font-size:11px;color:var(--text3);line-height:1.6">${issues}</ul>
+          <textarea id="cont-prompt-${k.kf_id}" rows="2" style="font-size:11px;padding:6px 8px;resize:vertical">${esc(k.image_prompt || '')}</textarea>
+          <button onclick="regenerateKeyframe('${k.kf_id}', this)" style="align-self:flex-start;font-size:11px;padding:5px 12px;border-radius:6px;cursor:pointer;background:#6d4aff;color:#fff;border:none">↻ Reshoot this still</button>
+        </div>
+      </div>`;
+    }).join('');
+  }
+
+  async function regenerateKeyframe(kfId, btn) {
+    const promptEl = document.getElementById(`cont-prompt-${kfId}`);
+    const imagePrompt = promptEl ? promptEl.value.trim() : null;
+    const orig = btn.textContent;
+    btn.disabled = true; btn.textContent = '↻ Reshooting…';
+    try {
+      const r = await fetch(`${API}/ai/${currentJobId}/regenerate-keyframe`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ kf_id: kfId, image_prompt: imagePrompt || null }),
+      });
+      if (!r.ok) throw new Error((await r.json()).detail || 'Reshoot failed');
+      const { keyframe } = await r.json();
+      const v = keyframe.verdict || {};
+      const sev = v.severity || 'ok';
+      const img = document.getElementById(`cont-img-${kfId}`);
+      if (img) img.src = `${API}/api/ai/keyframe/${currentJobId}/${keyframe.filename}?t=${Date.now()}`;
+      const sevEl = document.getElementById(`cont-sev-${kfId}`);
+      if (sevEl) { sevEl.style.background = _CONT_SEV_COLOR[sev] || '#666'; sevEl.textContent = _CONT_SEV_LABEL[sev] || sev; }
+      const issuesEl = document.getElementById(`cont-issues-${kfId}`);
+      if (issuesEl) issuesEl.innerHTML = (v.issues || []).map(i => `<li>${esc(i)}</li>`).join('');
+      const contBtn = document.getElementById('atab-continuity-btn');
+      if (contBtn && keyframe.flagged_count != null) {
+        contBtn.textContent = keyframe.flagged_count ? `🎞 Continuity Review (${keyframe.flagged_count})` : '🎞 Continuity Review';
+      }
+    } catch (e) {
+      showModuleError('ai', e.message);
+    } finally {
+      btn.disabled = false; btn.textContent = orig;
+    }
   }
 
   async function submitApproval() {
@@ -2527,11 +2739,17 @@
     meta += `<strong>Duration:</strong> ${(res.duration_seconds || 0).toFixed(1)}s &nbsp;`;
     meta += `<strong>Size:</strong> ${((res.file_size_bytes || 0) / 1024 / 1024).toFixed(1)} MB &nbsp;`;
     meta += `<strong>Clips:</strong> ${res.clips_used || 0}`;
+    if (res.estimated_cost != null) meta += ` &nbsp;<strong>Est. cost:</strong> $${Number(res.estimated_cost).toFixed(2)}`;
     if (res.text?.title) meta += `<br><strong>Title:</strong> ${res.text.title}`;
     if (res.text?.caption) meta += `<br><strong>Caption:</strong> ${res.text.caption}`;
     document.getElementById('result-meta').innerHTML = meta;
     document.getElementById('btn-download').href = `${API}/reel/download/${jobId}`;
     document.getElementById('btn-publer').classList.toggle('show', publerEnabled);
+
+    // Cinematic "Review inputs & cost" — store the review payload, toggle the button.
+    window.lastReview = res.review || null;
+    const reviewBtn = document.getElementById('btn-review');
+    if (reviewBtn) reviewBtn.style.display = res.review ? 'flex' : 'none';
 
     if (window.innerWidth < 1024) {
       card.scrollIntoView({ behavior: 'smooth', block: 'start' });
@@ -2541,6 +2759,55 @@
   function hideResult() {
     document.getElementById('result-card').classList.remove('visible');
     document.getElementById('output-empty').style.display = 'block';
+  }
+
+  // ── Review inputs & cost modal ──────────────────────────────────────────────
+  function switchReviewTab(id, btn) {
+    document.querySelectorAll('#review-modal .atab').forEach(b => b.classList.remove('active'));
+    document.querySelectorAll('#review-modal .atab-panel').forEach(p => p.classList.remove('active'));
+    btn.classList.add('active');
+    document.getElementById('rtab-' + id).classList.add('active');
+    const sc = document.querySelector('#review-modal .approval-scroll');
+    if (sc) sc.scrollTop = 0;
+  }
+
+  function openReviewModal() {
+    const r = window.lastReview;
+    if (!r) return;
+    const c = r.cost || {}, rows = c.rows || [];
+    document.getElementById('review-cost').innerHTML = `
+      <table style="width:100%;border-collapse:collapse;font-size:12px">
+        <thead><tr style="color:var(--text4);text-align:left">
+          <th style="padding:6px 4px">Stage</th><th style="padding:6px 4px;text-align:right">Units</th>
+          <th style="padding:6px 4px;text-align:right">Unit</th><th style="padding:6px 4px;text-align:right">Subtotal</th></tr></thead>
+        <tbody>${rows.map(x => `<tr style="border-top:1px solid var(--border)">
+          <td style="padding:6px 4px">${esc(x.stage)}</td>
+          <td style="padding:6px 4px;text-align:right">${x.units}</td>
+          <td style="padding:6px 4px;text-align:right">$${Number(x.unit_cost).toFixed(3)}</td>
+          <td style="padding:6px 4px;text-align:right">$${Number(x.subtotal).toFixed(2)}</td></tr>`).join('')}</tbody>
+        <tfoot><tr style="border-top:2px solid var(--border);font-weight:700">
+          <td style="padding:8px 4px" colspan="3">Total (estimated)</td>
+          <td style="padding:8px 4px;text-align:right">$${Number(c.total || 0).toFixed(2)}</td></tr></tfoot>
+      </table>
+      <p style="font-size:11px;color:var(--text4);margin-top:8px">${esc(c.note || '')}</p>`;
+
+    const inp = r.inputs || {}, shots = inp.shots || [], models = inp.models || {};
+    document.getElementById('review-inputs').innerHTML = `
+      <div style="border:1px solid #2a2440;border-radius:8px;padding:10px;margin-bottom:10px;background:#15131f">
+        <div style="font-size:10px;font-weight:700;text-transform:uppercase;color:var(--purple-text);margin-bottom:4px">🎬 Style lock (applied to every shot)</div>
+        <div style="font-size:12px;color:var(--text3);line-height:1.5">${esc(inp.style_lock || '')}</div>
+        <div style="font-size:11px;color:var(--text4);margin-top:8px">provider: ${esc(inp.provider || '')} · director: ${esc(models.director || '')} · keyframe: ${esc(models.keyframe || '')} · clip: ${esc(models.clip || '')}</div>
+      </div>` +
+      shots.map(s => `<div style="border:1px solid var(--border);border-radius:8px;padding:10px;margin-bottom:8px">
+        <div style="font-weight:700;font-size:12px;margin-bottom:4px">${esc(s.kf_id)} · ${esc(s.shot_type)} ${s.lens_mm}mm ${esc(s.dof)} ${esc(s.camera_move)}${s.needs_end_frame ? ' · end-frame' : ''}</div>
+        ${s.overlay_text ? `<div style="font-size:11px;color:var(--text2)"><b>On-screen:</b> ${esc(s.overlay_text)}</div>` : ''}
+        ${s.vo_text ? `<div style="font-size:11px;color:var(--text2)"><b>VO:</b> ${esc(s.vo_text)}</div>` : ''}
+        <div style="font-size:11px;color:var(--text3);margin-top:4px"><b>Still prompt →</b> ${esc(s.still_prompt_sent)}</div>
+        <div style="font-size:11px;color:var(--text3);margin-top:4px"><b>Clip prompt →</b> ${esc(s.clip_prompt_sent)}</div>
+      </div>`).join('');
+
+    switchReviewTab('cost', document.querySelector('#review-modal .atab'));
+    document.getElementById('review-modal').classList.add('open');
   }
 
   function showError(msg) {
@@ -2890,7 +3157,7 @@
 
   function switchAIReelType(type) {
     aiReelType = type;
-    ['story', 'character', 'none', 'product', 'ugc'].forEach(t => {
+    ['story', 'character', 'none', 'product', 'ugc', 'cinematic'].forEach(t => {
       document.getElementById('ai-rpill-' + t).classList.toggle('active', t === type);
       document.getElementById('ai-panel-' + t).style.display = t === type ? '' : 'none';
     });
@@ -2951,6 +3218,22 @@
       preview.src = URL.createObjectURL(file);
       preview.style.display = '';
       document.getElementById('ai-char-drop-label').style.display = 'none';
+    } catch(e) { showModuleError('ai', e.message); }
+  }
+
+  async function handleAICineUpload(input) {
+    const file = input.files[0];
+    if (!file) return;
+    try {
+      const fd = new FormData(); fd.append('file', file);
+      const r = await fetch(`${API}/api/ai/upload-image`, {method: 'POST', body: fd});
+      if (!r.ok) throw new Error('Upload failed');
+      const {path} = await r.json();
+      aiCharImagePath = path;
+      const preview = document.getElementById('ai-cine-preview');
+      preview.src = URL.createObjectURL(file);
+      preview.style.display = '';
+      document.getElementById('ai-cine-drop-label').style.display = 'none';
     } catch(e) { showModuleError('ai', e.message); }
   }
 
@@ -3049,7 +3332,7 @@
       text_hints: aiPrompt || null,
       reel_type: aiReelType,
       framework: document.getElementById('ai-framework').value,
-      character_image_path: (aiReelType === 'character' || aiReelType === 'ugc') ? aiCharImagePath : null,
+      character_image_path: (aiReelType === 'character' || aiReelType === 'ugc' || aiReelType === 'cinematic') ? aiCharImagePath : null,
       product_image_path: (aiReelType === 'product' || aiReelType === 'ugc') ? aiProductImagePath : null,
       keyframe_paths: aiReelType === 'story' && aiKeyframePaths.length ? aiKeyframePaths : null,
       skip_storyboard: document.getElementById('ai-skip-storyboard').checked,

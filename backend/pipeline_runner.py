@@ -763,6 +763,213 @@ def _default_storyboard(reel_brief: dict, n_scenes: int) -> dict:
     }
 
 
+# ── Cinematic keyframe director ────────────────────────────────────────────────
+
+def _cinematic_role_for(idx: int, total: int) -> str:
+    """Map a shot index onto the 4-beat arc (setup → build → turn → payoff)."""
+    if idx == 0:
+        return "hook"
+    if idx == total - 1:
+        return "outro"
+    pos = idx / max(total - 1, 1)
+    if pos < 0.4:
+        return "and"        # setup / build
+    if pos < 0.7:
+        return "but"        # turn
+    return "therefore"      # payoff
+
+
+def _shot_to_scene(shot: dict, idx: int, total: int) -> dict:
+    """Project one §5 shot onto the existing storyboard scene shape so the approval
+    modal, VO stage, and edit planner run unchanged. Cinematography fields are carried
+    along so the modal can surface them."""
+    return {
+        "scene": idx + 1,
+        "kf_id": shot.get("kf_id", f"KF{idx + 1}"),
+        "role": _cinematic_role_for(idx, total),
+        "visual_description": shot.get("image_prompt", ""),
+        "clip_hint": " ".join(filter(None, [shot.get("shot_type", ""), shot.get("camera_move", "")])),
+        "duration_seconds": float(shot.get("duration_sec", 2.0)),
+        "overlay_text": shot.get("overlay_text", ""),
+        "voiceover": shot.get("vo_text", ""),
+        # cinematography meta (surfaced in the approval modal, not used by Veo yet)
+        "shot_type": shot.get("shot_type", ""),
+        "lens_mm": shot.get("lens_mm"),
+        "dof": shot.get("dof", ""),
+        "camera_move": shot.get("camera_move", ""),
+        "transition_out": shot.get("transition_out", "cut"),
+        "needs_end_frame": bool(shot.get("needs_end_frame", False)),
+        "speaking_on_camera": bool(shot.get("speaking_on_camera", False)),
+    }
+
+
+def _default_cinematic_storyboard(reel_brief: dict, n_shots: int) -> dict:
+    """Deterministic fallback contract when Claude is unavailable or returns junk."""
+    target_dur = reel_brief["target_duration_seconds"]
+    dur_per = round(target_dur / n_shots, 1)
+    style_lock = "cinematic film still, Kodak Portra 400 grain, soft directional natural light, warm grade"
+    shot_types = ["ELS", "MS", "CU", "ECU", "Low", "MLS", "MCU", "High", "LS", "MS", "CU", "ECU"]
+    moves = ["locked", "push", "track", "locked", "pull", "pan", "locked", "orbit", "gimbal", "locked", "push", "locked"]
+    shots = []
+    for i in range(n_shots):
+        shots.append({
+            "kf_id": f"KF{i + 1}",
+            "duration_sec": dur_per,
+            "shot_type": shot_types[i % len(shot_types)],
+            "lens_mm": 35,
+            "dof": "shallow",
+            "camera_move": moves[i % len(moves)],
+            "image_prompt": "Cinematic frame of the subject in a richly lit environment",
+            "video_prompt": "Subtle, deliberate camera motion; the subject holds presence",
+            "vo_text": "",
+            "overlay_text": "",
+            "speaking_on_camera": False,
+            "transition_out": "cut",
+            "needs_end_frame": False,
+            "end_image_prompt": None,
+        })
+    return {
+        "version": "1.0",
+        "theme": reel_brief.get("prompt") or "Cinematic sequence",
+        "style_lock": style_lock,
+        "reference_image": reel_brief.get("character_image_path"),
+        "aspect_ratio": "9:16",
+        "shots": shots,
+        "scenes": [_shot_to_scene(s, i, n_shots) for i, s in enumerate(shots)],
+    }
+
+
+def _generate_cinematic_storyboard(reel_brief: dict) -> dict:
+    """
+    Cinematographer director for the Cinematic reel type. Takes a single reference
+    image + storyline + duration and emits the §5 per-shot contract: one global
+    style_lock plus 9–12 shots with shot_type / lens / DOF / camera_move / cut.
+
+    The system GENERATES its own keyframe stills downstream (M2) — this stage only
+    produces the contract. Output is validated against cinematic_storyboard.schema.json
+    and projected onto the existing storyboard scene shape for the rest of the pipeline.
+    """
+    import anthropic
+
+    target_dur = reel_brief["target_duration_seconds"]
+    # Shot count derives from the configured target shot length. Video bills per second
+    # at a ~5s floor per clip, so fewer/longer shots = fewer clips billed = less waste.
+    # Clamped 4–12 so the 4-beat arc + required shot variety still fit.
+    shot_seconds = float(settings_manager.get("cinematic_shot_seconds", 5.0) or 5.0)
+    n_shots = max(4, min(12, int(round(target_dur / max(shot_seconds, 1.5)))))
+    prompt = reel_brief.get("prompt") or reel_brief.get("text_hints") or "a cinematic character sequence"
+    use_brand = reel_brief.get("use_brand_guidelines", True)
+    brand_voice = settings_manager.get_brand_voice() if use_brand else ""
+    context = f"\n\nBrand voice:\n{brand_voice[:300]}" if brand_voice else ""
+    dur_per = round(target_dur / n_shots, 1)
+
+    api_key = os.getenv("ANTHROPIC_API_KEY", "") or settings_manager.get("anthropic_api_key", "")
+    if not api_key:
+        return _default_cinematic_storyboard(reel_brief, n_shots)
+
+    # Same Veo3/Nano content policy that governs the AI-Reels storyboard: English-only
+    # visual prompts, never minor/age terms, avoid violence/self-harm/sexual triggers.
+    policy = """
+CONTENT POLICY (image_prompt and video_prompt are sent to image/video models):
+- ENGLISH ONLY for image_prompt and video_prompt. vo_text may be Hinglish.
+- NEVER use age/minor words (girl, teen, child, kid, ladki, bachi, ...). Use woman, person, adult, figure.
+- Avoid violence/self-harm/sexual/hate trigger words; convey emotion through body language, light, and environment.
+"""
+
+    system = (
+        "You are a CINEMATOGRAPHER-DIRECTOR shooting a short cinematic sequence for a 9:16 reel.\n"
+        "You think in shots, lenses, depth of field, camera movement, and cuts — like a film DP.\n\n"
+        "Produce a STRICT JSON contract with ONE global style_lock and an array of shots.\n\n"
+        "HARD RULES:\n"
+        f"- Exactly {n_shots} shots, assembling to a clean 4-beat arc: setup → build → turn → payoff.\n"
+        "- Must include AT LEAST: one establishing wide (ELS/LS), one intimate close-up (CU/MCU),\n"
+        "  one ECU detail (Insert/ECU), and one power angle (Low or High).\n"
+        "- style_lock is authored ONCE (film stock/grain, location, wardrobe, palette, light) and is\n"
+        "  appended to every prompt — it MUST NOT vary per shot. Do NOT repeat it inside image_prompt.\n"
+        "- The SAME character/wardrobe from the reference image appears in every shot.\n"
+        "- Default speaking_on_camera=false; frame narration shots as listening / breathing / observing,\n"
+        "  NOT talking. Only set true with clear justification (we have no lip-sync).\n"
+        "- transition_out is one of cut/dissolve/match_cut (prefer cut).\n"
+        "- Set needs_end_frame=true only for shots with strong motion that benefit from start+end\n"
+        "  keyframe interpolation; then end_image_prompt is REQUIRED, else null.\n"
+        "- overlay_text: short punchy ON-SCREEN caption for this beat (≤6 words, front-load tension).\n"
+        "  Carry the narrative like a captioned reel. Use \"\" for pure-visual beats — NOT every shot\n"
+        "  needs text (aim for ~half). overlay_text may be Hinglish (brand voice); keep it tight.\n"
+        + policy +
+        "\nRespond ONLY with valid JSON — no markdown fences.\n"
+        "Shape: {\"style_lock\": \"...\", \"aspect_ratio\": \"9:16\", \"shots\": [{"
+        "\"kf_id\": \"KF1\", \"duration_sec\": <num>, \"shot_type\": \"ELS|LS|MLS|MS|MCU|CU|ECU|Low|High|Insert\", "
+        "\"lens_mm\": <num>, \"dof\": \"shallow|medium|deep\", "
+        "\"camera_move\": \"locked|push|pull|pan|track|orbit|gimbal\", "
+        "\"image_prompt\": \"still framing for this beat (English)\", "
+        "\"video_prompt\": \"motion/camera direction for the video model (English)\", "
+        "\"vo_text\": \"spoken line for this beat (may be empty)\", "
+        "\"overlay_text\": \"short on-screen caption ≤6 words, or empty\", "
+        "\"speaking_on_camera\": false, \"transition_out\": \"cut\", "
+        "\"needs_end_frame\": false, \"end_image_prompt\": null}]}"
+    )
+
+    user = (
+        f"Storyline: {prompt}{context}\n"
+        f"Target duration: {target_dur}s across {n_shots} shots (~{dur_per}s each).\n"
+        "Write the cinematic shot contract now."
+    )
+
+    try:
+        client = anthropic.Anthropic(api_key=api_key)
+        msg = client.messages.create(
+            model="claude-sonnet-4-6",
+            max_tokens=4096,
+            messages=[{"role": "user", "content": user}],
+            system=system,
+        )
+        raw = msg.content[0].text.strip()
+        if raw.startswith("```"):
+            raw = raw.split("```")[1]
+            if raw.startswith("json"):
+                raw = raw[4:]
+            raw = raw.strip()
+        data = json.loads(raw)
+    except (anthropic.APIError, json.JSONDecodeError, KeyError, IndexError):
+        return _default_cinematic_storyboard(reel_brief, n_shots)
+
+    shots = data.get("shots", [])
+    if not shots:
+        return _default_cinematic_storyboard(reel_brief, n_shots)
+
+    # Normalize shot durations to sum to target (Veo caps each at 8s).
+    total = sum(float(s.get("duration_sec", dur_per)) for s in shots)
+    scale = target_dur / max(total, 1)
+    for i, s in enumerate(shots):
+        s["duration_sec"] = round(min(float(s.get("duration_sec", dur_per)) * scale, 8.0), 1)
+        s.setdefault("kf_id", f"KF{i + 1}")
+        s.setdefault("speaking_on_camera", False)
+        s.setdefault("transition_out", "cut")
+        s.setdefault("needs_end_frame", False)
+        s.setdefault("end_image_prompt", None)
+        s.setdefault("vo_text", "")
+        s.setdefault("overlay_text", "")
+
+    contract = {
+        "version": "1.0",
+        "theme": data.get("theme") or (prompt[:60].strip()),
+        "style_lock": data.get("style_lock", ""),
+        "reference_image": reel_brief.get("character_image_path"),
+        "aspect_ratio": data.get("aspect_ratio", "9:16"),
+        "shots": shots,
+        "scenes": [_shot_to_scene(s, i, len(shots)) for i, s in enumerate(shots)],
+    }
+
+    # Validate against the schema; fall back to default if the director drifted off-contract.
+    errors = validate_artifact(str(SCHEMAS_DIR), "cinematic_storyboard", contract)
+    if errors:
+        fallback = _default_cinematic_storyboard(reel_brief, n_shots)
+        fallback["_validation_errors"] = errors[:8]
+        return fallback
+
+    return contract
+
+
 # ── Clip selection per scene ───────────────────────────────────────────────────
 
 def _fuzzy_clip_score(hint: str, clip: dict) -> float:
