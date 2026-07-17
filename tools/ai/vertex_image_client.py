@@ -106,14 +106,31 @@ class VertexImageClient(BaseTool):
         }
         url = _ENDPOINT_TMPL.format(location=location, project=project, model=model)
         headers = {"Authorization": f"Bearer {token}", "Content-Type": "application/json"}
-        try:
-            with httpx.Client(timeout=120) as client:
-                resp = client.post(url, headers=headers, json=body)
-                if not resp.is_success:
-                    return ToolResult(success=False, error=f"Vertex image HTTP {resp.status_code}: {resp.text[:500]}")
-                data = resp.json()
-        except Exception as exc:
-            return ToolResult(success=False, error=str(exc))
+        # Vertex image quota is easily hit (429 RESOURCE_EXHAUSTED) — retry with
+        # exponential backoff so a burst of parallel keyframes doesn't just fail.
+        import time
+        data = None
+        last_err = ""
+        for attempt in range(5):
+            try:
+                with httpx.Client(timeout=120) as client:
+                    resp = client.post(url, headers=headers, json=body)
+                if resp.is_success:
+                    data = resp.json()
+                    break
+                last_err = f"Vertex image HTTP {resp.status_code}: {resp.text[:500]}"
+                if resp.status_code == 429 and attempt < 4:
+                    time.sleep(min(2 ** attempt * 3, 30))  # 3s, 6s, 12s, 24s
+                    continue
+                return ToolResult(success=False, error=last_err)
+            except Exception as exc:
+                last_err = str(exc)
+                if attempt < 4:
+                    time.sleep(min(2 ** attempt * 3, 30))
+                    continue
+                return ToolResult(success=False, error=last_err)
+        if data is None:
+            return ToolResult(success=False, error=last_err or "Vertex image: no response")
 
         # Find the first inline image in the response candidates.
         try:

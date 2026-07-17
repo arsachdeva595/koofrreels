@@ -21,12 +21,36 @@ from backend import settings_manager
 _MEDIA = {"jpg": "image/jpeg", "jpeg": "image/jpeg", "png": "image/png", "webp": "image/webp"}
 
 
+# Claude vision hard-caps images at 10 MB and works best at ≤1568px on the long edge.
+# Full-res 1080×1920 PNG stills easily blow past 10 MB, so downscale + JPEG-compress
+# before sending (identity is still perfectly judgeable at this size).
+_VISION_MAX_EDGE = 1568
+_VISION_MAX_BYTES = 4_500_000
+
+
 def _img_block(path: str) -> dict | None:
     p = Path(path)
     if not p.exists():
         return None
+    raw = p.read_bytes()
     media = _MEDIA.get(p.suffix.lower().lstrip("."), "image/jpeg")
-    data = base64.standard_b64encode(p.read_bytes()).decode()
+    needs_shrink = len(raw) > _VISION_MAX_BYTES or media not in ("image/jpeg", "image/png")
+    try:
+        import io
+        from PIL import Image
+        img = Image.open(io.BytesIO(raw))
+        w, h = img.size
+        if needs_shrink or max(w, h) > _VISION_MAX_EDGE:
+            img = img.convert("RGB")
+            if max(w, h) > _VISION_MAX_EDGE:
+                scale = _VISION_MAX_EDGE / max(w, h)
+                img = img.resize((max(1, int(w * scale)), max(1, int(h * scale))))
+            buf = io.BytesIO()
+            img.save(buf, format="JPEG", quality=85)
+            raw, media = buf.getvalue(), "image/jpeg"
+    except Exception:
+        pass  # fall back to raw bytes if PIL isn't available / fails
+    data = base64.standard_b64encode(raw).decode()
     return {"type": "image", "source": {"type": "base64", "media_type": media, "data": data}}
 
 

@@ -89,17 +89,18 @@ class KeyframeGenerator:
         return ", ".join(bits)
 
     def _still_prompt(self, shot: dict, style_lock: str) -> str:
-        # Lead with THIS shot's creative + framing so the per-shot prompt drives the
-        # composition. The reference images are then scoped to IDENTITY ONLY, with an
-        # explicit instruction not to copy their pose/framing/background — otherwise the
-        # character sheet dominates and every still looks the same (caveat C1 trade-off).
+        # LEAD with a hard identity lock — the model must render the SAME person from the
+        # reference, not a look-alike (the previous "fresh composition first" phrasing let
+        # weaker image models invent a new character). Then describe the new shot; only
+        # pose/framing/lighting/background vary shot to shot.
         return (
-            f"{self._framing(shot)}: {shot.get('image_prompt', '').strip()} "
-            "A distinct, fresh composition for THIS shot — vertical 9:16 cinematic film still, photorealistic. "
-            "Use the reference image(s) ONLY to keep the person's identity consistent: same face, "
-            "hairstyle, skin tone, and wardrobe (prints, colours, accessories). "
-            "Do NOT copy the reference's pose, framing, crop, lighting, or background — build the "
-            "scene, pose, and camera exactly as described above. "
+            "Generate a photo of the SAME PERSON shown in the reference image(s). Keep their "
+            "identity EXACTLY: identical face and facial features, same hairstyle, same skin tone, "
+            "and the same outfit — identical prints, colours and accessories. It must be "
+            "unmistakably the same individual, never a look-alike or a different person. "
+            f"Place that exact person in a NEW shot — {self._framing(shot)}: {shot.get('image_prompt', '').strip()} "
+            "Vertical 9:16 cinematic film still, photorealistic. Only the pose, camera framing, "
+            "lighting and background change from shot to shot; the person and their wardrobe stay identical. "
             f"Overall look: {style_lock}"
         )
 
