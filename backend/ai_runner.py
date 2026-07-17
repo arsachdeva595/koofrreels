@@ -561,10 +561,12 @@ def run_ai_pipeline(job: Job, params: dict[str, Any]) -> None:
                 "score": None,
             }, None
 
-        # Build render units: one per scene, EXCEPT when voiceover drives the edit —
-        # then a scene whose narration is longer than one clip fans out into several
-        # units (multi-clip) so the visual can cover the full VO and nothing is cut.
-        from tools.audio.pause_detector import plan_beat_clips
+        # Build render units. When voiceover drives the edit (all AI reel types), each
+        # scene is cut on its narration's NATURAL PAUSES — same pause-driven logic as
+        # Cinematic: detect the pauses in the scene's VO, tile it into beats, and a beat
+        # longer than one clip fans into several (multi-clip). The visual tiles the full
+        # VO so nothing is cut and every visual change lands on a speech pause.
+        from tools.audio.pause_detector import plan_beat_clips, detect_beats, beats_to_segments
 
         def _pad_for(scene: dict) -> float:
             if reel_type == "character":
@@ -579,13 +581,20 @@ def run_ai_pipeline(job: Job, params: dict[str, Any]) -> None:
         _uorder = 0
         for si, scene in enumerate(scenes):
             pad = _pad_for(scene)
-            vo = scene_vo_durations.get(scene["scene"], 0.0) if multiclip_vo else 0.0
-            if multiclip_vo and vo > 0:
+            sn = scene["scene"]
+            vo = scene_vo_durations.get(sn, 0.0) if multiclip_vo else 0.0
+            vo_path = scene_vo_files.get(sn) if multiclip_vo else None
+            if multiclip_vo and vo > 0 and vo_path:
                 usable = max(2.0, _clip_secs - pad)
-                for c in plan_beat_clips([{"start": 0, "end": vo, "duration": vo}], max_clip_seconds=usable):
-                    render_units.append({"order": _uorder, "scene_index": si, "scene": scene,
-                                         "sub": c["sub_index"], "target_dur": c["target_duration"], "pad": pad})
-                    _uorder += 1
+                _det = detect_beats(vo_path)
+                _segs = beats_to_segments(_det["beats"], _det["total_duration"] or vo)
+                _sub = 0
+                for seg in _segs:
+                    for c in plan_beat_clips([seg], max_clip_seconds=usable):
+                        render_units.append({"order": _uorder, "scene_index": si, "scene": scene,
+                                             "sub": _sub, "target_dur": c["target_duration"], "pad": pad})
+                        _uorder += 1
+                        _sub += 1
             elif multiclip_vo:
                 usable = max(2.0, _clip_secs - pad)
                 render_units.append({"order": _uorder, "scene_index": si, "scene": scene, "sub": 0,
