@@ -1135,7 +1135,10 @@ def regenerate_cinematic_keyframe(job: Job, kf_id: str, image_prompt: str | None
 # silent clips. Passed as a negative prompt to keep the generated clips silent.
 _CINEMATIC_NO_SPEECH = (
     "speech, narration, voiceover, talking, dialogue, spoken words, "
-    "singing, lip movement, subtitles, captions"
+    "singing, lip movement, subtitles, captions, "
+    # Style descriptors (e.g. "shot on Kodak") must affect the LOOK only — never
+    # appear as literal text/letters/logos burned into the frame.
+    "on-screen text, words, letters, typography, captions, watermark, logo, brand name"
 )
 
 

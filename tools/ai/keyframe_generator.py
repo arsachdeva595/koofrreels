@@ -101,7 +101,10 @@ class KeyframeGenerator:
             f"Place that exact person in a NEW shot — {self._framing(shot)}: {shot.get('image_prompt', '').strip()} "
             "Vertical 9:16 cinematic film still, photorealistic. Only the pose, camera framing, "
             "lighting and background change from shot to shot; the person and their wardrobe stay identical. "
-            f"Overall look: {style_lock}"
+            f"Overall look (affects grain/colour/lighting ONLY): {style_lock}. "
+            "IMPORTANT: render NO text, words, letters, captions, watermarks, brand names or logos "
+            "anywhere in the image — film-stock names like 'Kodak' describe the look, they must never "
+            "appear as visible text."
         )
 
     # ── Single generations ──────────────────────────────────────────────────────
@@ -112,7 +115,8 @@ class KeyframeGenerator:
             "neutral standing pose, front view, even soft studio light, plain neutral background, "
             "the full outfit and all accessories clearly visible, photorealistic. "
             "Keep an identical face, hairstyle and wardrobe to the reference. "
-            f"STYLE: {style_lock}"
+            f"STYLE (look only): {style_lock}. "
+            "Render NO text, words, letters, watermarks, brand names or logos in the image."
         )
         return self._generate_image(prompt, [reference_path], dest_path)
 
