@@ -67,6 +67,46 @@ def build_render_plan(
     return plan
 
 
+def build_edit_decisions(render_plan: list[dict], clip_manifest: dict) -> dict:
+    """Turn the render plan + generated clips into edit_decisions the composer uses.
+
+    One cut per render unit, in order, HARD CUT (cut on the pause), trimmed to the
+    unit's target_duration (capped at the clip's real length). No crossfade overlap,
+    so total visual length == sum of targets == the VO length, and the full VO lays
+    over the timeline with no positioning or truncation.
+    """
+    by_still = {c.get("still_id") or c.get("clip_id"): c for c in clip_manifest.get("clips", [])}
+    cuts: list[dict] = []
+    order = 0
+    for unit in render_plan:
+        clip = by_still.get(unit["still_id"])
+        if not clip:
+            continue
+        clip_len = float(clip.get("duration_seconds", unit["target_duration"]))
+        trim_out = round(min(float(unit["target_duration"]), clip_len), 3)
+        if trim_out <= 0:
+            continue
+        cuts.append({
+            "order": order,
+            "clip_id": clip["clip_id"],
+            "still_id": unit["still_id"],
+            "trim_in": 0.0,
+            "trim_out": trim_out,
+            "transition": "hard_cut",
+            "transition_duration_seconds": 0.0,
+            "scene": unit.get("scene"),
+        })
+        order += 1
+    total = round(sum(c["trim_out"] - c["trim_in"] for c in cuts), 3)
+    return {
+        "version": "1.0",
+        "cuts": cuts,
+        "total_duration_seconds": max(total, 1.0),
+        "music_start_offset_seconds": 0.0,
+        "abt_timing": {},
+    }
+
+
 def plan_summary(plan: list[dict]) -> dict:
     """Rollups for cost estimation / logging."""
     n_clips = len(plan)

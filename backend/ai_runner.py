@@ -9,8 +9,10 @@ audio mix — is identical to stock_runner.
 """
 from __future__ import annotations
 
+import json
 import os
 import shutil
+import subprocess
 import uuid
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
@@ -21,13 +23,19 @@ from backend.job_manager import Job, JobStatus
 from backend import settings_manager
 from backend.pipeline_runner import (
     _generate_storyboard,
+    _generate_cinematic_storyboard,
     _compute_scene_text_timing,
     _generate_scene_vo_files,
     _resolve_music,
     _ts,
 )
 from backend import edit_planner
+from tools.base_tool import ToolResult
 from tools.ai.veo3_client import Veo3Client, VEO3_MAX_DURATION
+from tools.ai.fal_client import FalClient
+from tools.ai.wavespeed_client import WaveSpeedClient
+from tools.ai.keyframe_generator import KeyframeGenerator
+from tools.ai.continuity_checker import ContinuityChecker
 from tools.analysis.clip_analyzer import ClipAnalyzer
 from tools.analysis.audio_prober import AudioProber
 from tools.analysis.frame_sampler import FrameSampler
@@ -36,6 +44,7 @@ from tools.audio.audio_mixer import AudioMixer
 from tools.video.text_renderer import TextRenderer
 from tools.video.video_composer import VideoComposer
 from tools.video.video_normalizer import VideoNormalizer
+from tools.video.color_matcher import ColorMatcher
 
 
 def _parse_script_to_storyboard(script: str) -> dict:
@@ -219,6 +228,13 @@ def run_ai_pipeline(job: Job, params: dict[str, Any]) -> None:
                     "UGC mode needs BOTH a creator image and a product image — upload both in AI Reels → UGC."
                 )
 
+        # ── Cinematic mode needs one character reference image ─────────────────
+        if params.get("reel_type") == "cinematic":
+            if not params.get("character_image_path"):
+                raise RuntimeError(
+                    "Cinematic mode needs one character reference image — upload it in AI Reels → Cinematic."
+                )
+
         # ── Product / UGC mode: read the product from its image (vision) ───────
         # The description is fed into the storyboard prompt so the script is built
         # around the actual product, not just the text prompt.
@@ -234,7 +250,19 @@ def run_ai_pipeline(job: Job, params: dict[str, Any]) -> None:
 
         # ── STAGE 2: storyboard ────────────────────────────────────────────────
         skip_storyboard = params.get("skip_storyboard", False)
-        if skip_storyboard:
+        is_cinematic = params.get("reel_type") == "cinematic"
+        if is_cinematic:
+            # Cinematic type: a cinematographer-director emits a per-shot contract
+            # (style_lock + shots[]) with shot type / lens / DOF / camera move / cut.
+            # The contract carries a normalized scenes[] so the rest of the flow runs.
+            job.begin_stage("storyboard", "Cinematic Shot Plan", "Claude is shot-listing your sequence...")
+            job.update(progress_pct=8)
+            # Pass the single reference image through to the director.
+            reel_brief["character_image_path"] = params.get("character_image_path")
+            storyboard = _generate_cinematic_storyboard(reel_brief)
+            scenes = storyboard["scenes"]
+            job.end_stage("storyboard", f"{len(scenes)}-shot cinematic plan ready — awaiting your approval")
+        elif skip_storyboard:
             job.begin_stage("storyboard", "Parsing Your Script", "Reading scene-by-scene instructions...")
             job.update(progress_pct=8)
             storyboard = _parse_script_to_storyboard(params.get("prompt", ""))
@@ -265,6 +293,9 @@ def run_ai_pipeline(job: Job, params: dict[str, Any]) -> None:
             _, subs = _sp(check)
             minor_hits = [w for w in _MINOR_TERMS if w in check.lower()]
             flags = subs + ([f"minor-detection risk: '{h}' → use 'woman' or 'person'" for h in minor_hits])
+            # Cinematic C2: flag any shot the director set to speak on camera (no lip-sync).
+            if is_cinematic and scene.get("speaking_on_camera"):
+                flags = flags + ["speaking_on_camera=true — no lip-sync; reframe as listening/observing or it will read as broken sync"]
             if flags:
                 policy_flags.append({
                     "scene": scene["scene"],
@@ -273,17 +304,24 @@ def run_ai_pipeline(job: Job, params: dict[str, Any]) -> None:
                 })
 
         # ── APPROVAL ───────────────────────────────────────────────────────────
-        job.request_approval({
+        approval_payload = {
             "storyboard": storyboard,
             "reel_summary": {
                 "mode": "ai_reels",
+                "reel_type": params.get("reel_type", "story"),
                 "prompt": reel_brief.get("prompt") or reel_brief.get("text_hints"),
                 "target_duration_seconds": reel_brief["target_duration_seconds"],
                 "scene_count": len(scenes),
                 "music_file": reel_brief.get("music_file") or "Random from library",
             },
             "policy_flags": policy_flags,
-        })
+        }
+        if is_cinematic:
+            # Surface the §5 contract so the modal can render per-shot cinematography.
+            approval_payload["cinematic"] = True
+            approval_payload["style_lock"] = storyboard.get("style_lock", "")
+            approval_payload["shots"] = storyboard.get("shots", [])
+        job.request_approval(approval_payload)
         approved = job.wait_for_approval(timeout=1800)
         if not approved:
             raise RuntimeError("Approval timed out after 30 minutes")
@@ -296,6 +334,25 @@ def run_ai_pipeline(job: Job, params: dict[str, Any]) -> None:
                 s["overlay_text"] = edits["overlay_text"]
             if "voiceover" in edits:
                 s["voiceover"] = edits["voiceover"]
+
+        # ── CINEMATIC: pause-driven edit (audio is the master timeline) ────────────
+        # 1. VO first → detect pauses → render plan. 2. base stills + continuity gate.
+        # 3. continuation stills for multi-beat shots. 4. one clip per beat.
+        # 5. assemble with cuts on the pauses + the full VO. Falls back to the original
+        # shot-per-clip flow when there's no voiceover to time against.
+        if is_cinematic:
+            render_plan, vo_concat_path, _vo_sec = _run_cinematic_plan(
+                job, params, project_dir, storyboard, scenes)
+            _run_cinematic_keyframes(job, params, project_dir, project_id, storyboard, scenes)
+            if render_plan:
+                _run_cinematic_continuation_stills(job, project_dir, storyboard, render_plan)
+                clip_manifest = _run_cinematic_clips_planned(job, params, project_dir, storyboard, render_plan)
+                _run_cinematic_finish_planned(job, params, project_dir, project_id,
+                                              storyboard, clip_manifest, render_plan, vo_concat_path)
+            else:
+                clip_manifest = _run_cinematic_clips(job, params, project_dir, project_id, storyboard)
+                _run_cinematic_finish(job, params, project_dir, project_id, storyboard, clip_manifest)
+            return
 
         # ── STAGE 3: voiceover TTS ─────────────────────────────────────────────
         job.begin_stage("voiceover", "Generating Voiceover", "Sending script to ElevenLabs...")
@@ -317,7 +374,7 @@ def run_ai_pipeline(job: Job, params: dict[str, Any]) -> None:
                 job.end_stage("voiceover", "No ElevenLabs key set — skipping voiceover")
 
         # ── STAGE 4: clip_selection (Veo3) ─────────────────────────────────────
-        job.begin_stage("clip_selection", "Generating AI Clips", "Sending each scene to Veo3...")
+        job.begin_stage("clip_selection", "Generating AI Clips", "Sending each scene to the video model...")
         job.update(progress_pct=25)
 
         project_id_vx = settings_manager.get("vertex_project_id")
@@ -328,6 +385,14 @@ def run_ai_pipeline(job: Job, params: dict[str, Any]) -> None:
         # Veo models — both configurable in Settings → Google Cloud.
         standard_model = settings_manager.get("veo_standard_model") or "veo-3.1-lite-generate-001"
         ugc_model = settings_manager.get("veo_reference_model") or "veo-3.1-generate-001"
+        # Global AI video provider (applies to every AI reel type).
+        ai_provider = (settings_manager.get("ai_video_provider", "veo3") or "veo3").lower()
+        fal_video_endpoint = settings_manager.get("fal_video_endpoint") or "fal-ai/kling-video/v2.1/pro/image-to-video"
+        ws_video_model = settings_manager.get("wavespeed_video_model") or "wavespeed-ai/wan-i2v-480p"
+        if ai_provider == "fal":
+            os.environ.setdefault("FAL_API_KEY", os.getenv("FAL_API_KEY", "") or settings_manager.get("fal_api_key", ""))
+        elif ai_provider == "wavespeed":
+            os.environ.setdefault("WAVESPEED_API_KEY", os.getenv("WAVESPEED_API_KEY", "") or settings_manager.get("wavespeed_api_key", ""))
         n_scenes = len(scenes)
 
         # How images are used per reel type:
@@ -443,44 +508,35 @@ def run_ai_pipeline(job: Job, params: dict[str, Any]) -> None:
                 image_path = product_image_path
 
             neg_prompt = _VEO3_NO_SPEECH if vo_on else ""
+            veo_model = ugc_model if reference_image_paths else standard_model
 
-            result = Veo3Client().execute({
-                "operation": "text_to_video",
-                "prompt": prompt,
-                "duration_seconds": duration,
-                "dest_path": dest_path,
-                "vertex_project_id": project_id_vx,
-                "vertex_location": location,
-                "image_path": image_path,
-                "reference_image_paths": reference_image_paths,
-                "model": ugc_model if reference_image_paths else standard_model,
-                "negative_prompt": neg_prompt,
-            })
+            result = _generate_video_clip(
+                ai_provider, prompt=prompt, dest_path=dest_path,
+                image_path=image_path, reference_image_paths=reference_image_paths,
+                negative_prompt=neg_prompt, duration=duration,
+                vertex_project_id=project_id_vx, vertex_location=location,
+                veo_model=veo_model, fal_endpoint=fal_video_endpoint, ws_model=ws_video_model,
+            )
 
-            # ── Auto-retry on policy violation ──────────────────────────────
+            # ── Auto-retry on policy violation (Veo content policy) ──────────
             if not result.success and _is_policy_error(result.error):
                 safe_prompt = _rewrite_safe_prompt(prompt)
-                retry_path = str(clips_dir / f"clip_{i:03d}_veo3_retry.mp4")
-                result = Veo3Client().execute({
-                    "operation": "text_to_video",
-                    "prompt": safe_prompt,
-                    "duration_seconds": duration,
-                    "dest_path": retry_path,
-                    "vertex_project_id": project_id_vx,
-                    "vertex_location": location,
-                    "image_path": image_path,
-                    "reference_image_paths": reference_image_paths,
-                    "model": ugc_model if reference_image_paths else standard_model,
-                    "negative_prompt": neg_prompt,
-                })
+                retry_path = str(clips_dir / f"clip_{i:03d}_retry.mp4")
+                result = _generate_video_clip(
+                    ai_provider, prompt=safe_prompt, dest_path=retry_path,
+                    image_path=image_path, reference_image_paths=reference_image_paths,
+                    negative_prompt=neg_prompt, duration=duration,
+                    vertex_project_id=project_id_vx, vertex_location=location,
+                    veo_model=veo_model, fal_endpoint=fal_video_endpoint, ws_model=ws_video_model,
+                )
                 if result.success:
                     dest_path = retry_path
             if not result.success:
-                return i, None, f"Veo3 failed for scene {i + 1}: {result.error}"
+                return i, None, f"Clip generation failed for scene {i + 1} ({ai_provider}): {result.error}"
 
             an = ClipAnalyzer().execute({"local_path": dest_path})
             if not an.success:
-                return i, None, f"Could not analyze Veo3 clip for scene {i + 1}"
+                return i, None, f"Could not analyze generated clip for scene {i + 1}"
 
             return i, {
                 "clip_id": f"clip_{i:03d}",
@@ -489,7 +545,7 @@ def run_ai_pipeline(job: Job, params: dict[str, Any]) -> None:
                 "duration_seconds": float(an.data["duration_seconds"]),
                 "resolution": {"width": an.data["width"], "height": an.data["height"]},
                 "fps": an.data["fps"],
-                "selection_reason": f"Veo3: {scene['visual_description'][:60]}",
+                "selection_reason": f"{ai_provider}: {scene['visual_description'][:60]}",
                 "scene": scene["scene"],
                 "score": None,
             }, None
@@ -754,6 +810,1004 @@ def run_ai_pipeline(job: Job, params: dict[str, Any]) -> None:
     except Exception as exc:
         job.update(status=JobStatus.FAILED, message="AI pipeline failed", error=str(exc))
         raise
+
+
+# ── Cinematic M2: keyframe generation + continuity QA ──────────────────────────
+
+def _cinematic_reference_paths(reference_path: str, char_sheet: str | None) -> list[str]:
+    paths = [reference_path]
+    if char_sheet and Path(char_sheet).exists():
+        paths.append(char_sheet)
+    return paths
+
+
+def _build_keyframes_payload(entries: list[dict], verdicts: dict[str, dict]) -> list[dict]:
+    out = []
+    for e in entries:
+        out.append({
+            "kf_id": e["kf_id"],
+            "scene": e["scene"],
+            "filename": e["filename"],
+            "image_prompt": e["image_prompt"],
+            "success": e["success"],
+            "error": e.get("error"),
+            "verdict": verdicts.get(e["kf_id"], {}),
+        })
+    return out
+
+
+def _flagged_count(keyframes_payload: list[dict]) -> int:
+    # Only a "fail" (clearly a different person/outfit) counts as a blocking flag.
+    # "warn" (minor drift) stays advisory — shown in the UI but not counted, so the
+    # gate doesn't cry wolf on every shot.
+    return sum(
+        1 for k in keyframes_payload
+        if not k["verdict"].get("pass", True) or k["verdict"].get("severity") == "fail"
+    )
+
+
+def _run_cinematic_keyframes(job: Job, params: dict, project_dir: Path, project_id: str,
+                             storyboard: dict, scenes: list[dict]) -> None:
+    """Generate keyframe stills (chained for character lock, C1), run the continuity
+    drift gate on the cheap stills (C3), and stop at the M2 boundary before any video
+    spend. Context is stashed on the job so a single still can be reshot from the modal."""
+    # Reflect approval-gate VO edits back into the shot contract.
+    shots = storyboard.get("shots", [])
+    scene_by_num = {s["scene"]: s for s in scenes}
+    for i, shot in enumerate(shots):
+        edited = scene_by_num.get(i + 1, {})
+        if "voiceover" in edited:
+            shot["vo_text"] = edited["voiceover"]
+
+    style_lock = storyboard.get("style_lock", "")
+    reference_path = params.get("character_image_path")
+    strategy = settings_manager.get("cinematic_chaining_strategy", "sheet")
+    keyframes_dir = project_dir / "keyframes"
+    keyframes_dir.mkdir(parents=True, exist_ok=True)
+
+    fal_key = os.getenv("FAL_API_KEY", "") or settings_manager.get("fal_api_key", "")
+    if not fal_key:
+        raise RuntimeError(
+            "FAL_API_KEY is not set — add your fal.ai key in Settings to generate cinematic keyframes."
+        )
+    os.environ.setdefault("FAL_API_KEY", fal_key)
+
+    # ── STAGE: keyframe_generation ─────────────────────────────────────────────
+    job.begin_stage("keyframe_generation", "Generating Keyframes",
+                    f"Nano Banana · {strategy} character lock...")
+    job.update(progress_pct=12)
+    n = len(shots)
+
+    def _kf_progress(done: int, total: int, kf_id: str, ok: bool) -> None:
+        job.update(progress_pct=12 + int((done / max(total, 1)) * 12),
+                   message=f"Keyframe {done}/{total} ({kf_id})" + ("" if ok else " — failed"))
+
+    gen = KeyframeGenerator().generate_sequence(
+        shots, style_lock, reference_path, str(keyframes_dir),
+        strategy=strategy, progress_cb=_kf_progress,
+    )
+    entries = gen["entries"]
+    char_sheet = gen["character_sheet"]
+    ok_count = sum(1 for e in entries if e["success"])
+    if ok_count < 2:
+        first_err = next((e["error"] for e in entries if e.get("error")), "unknown error")
+        raise RuntimeError(f"Only {ok_count}/{n} keyframes generated — need at least 2. Error: {first_err}")
+    job.end_stage("keyframe_generation",
+                  f"{ok_count}/{n} keyframes generated" + (" · character sheet locked" if char_sheet else ""))
+
+    # ── STAGE: continuity_qa (drift gate on cheap stills, before any video) ─────
+    job.begin_stage("continuity_qa", "Continuity Check", "Claude is checking character drift on the stills...")
+    job.update(progress_pct=26)
+    reference_paths = _cinematic_reference_paths(reference_path, char_sheet)
+    verdicts = ContinuityChecker().check_entries(entries, reference_paths)
+    keyframes_payload = _build_keyframes_payload(entries, verdicts)
+    flagged = _flagged_count(keyframes_payload)
+    n_warn = sum(1 for k in keyframes_payload if k["verdict"].get("severity") == "warn")
+    if flagged:
+        qa_msg = f"{flagged} of {len(keyframes_payload)} stills flagged (drift) — reshoot before clips"
+    elif n_warn:
+        qa_msg = f"All stills usable · {n_warn} minor-drift advisories"
+    else:
+        qa_msg = "All stills consistent"
+    job.end_stage("continuity_qa", qa_msg)
+
+    # Persist artifacts so the run is resumable/reviewable.
+    keyframe_manifest = {
+        "version": "1.0",
+        "strategy": strategy,
+        "character_sheet": char_sheet,
+        "keyframes": [
+            {k: e[k] for k in ("kf_id", "scene", "filename", "local_path", "image_prompt", "success", "error")}
+            for e in entries
+        ],
+        "verdicts": verdicts,
+    }
+    (project_dir / "keyframe_manifest.json").write_text(json.dumps(keyframe_manifest, indent=2))
+    (project_dir / "cinematic_contract.json").write_text(json.dumps(storyboard, indent=2))
+
+    # Stash context so the regenerate-single-still endpoint + image serving can work.
+    job.cinematic_ctx = {
+        "project_dir": str(project_dir),
+        "keyframes_dir": str(keyframes_dir),
+        "reference_path": reference_path,
+        "reference_paths": reference_paths,
+        "char_sheet": char_sheet,
+        "style_lock": style_lock,
+        "strategy": strategy,
+        "shots": shots,
+    }
+
+    # ── CONTINUITY QA GATE (second approval) ───────────────────────────────────
+    job.request_approval({
+        "storyboard": storyboard,
+        "reel_summary": {
+            "mode": "ai_reels",
+            "reel_type": "cinematic",
+            "prompt": params.get("prompt"),
+            "target_duration_seconds": round(sum(float(s.get("duration_sec", 0)) for s in shots), 1),
+            "scene_count": n,
+        },
+        "policy_flags": [],
+        "cinematic": True,
+        "continuity": True,
+        "style_lock": style_lock,
+        "keyframes": keyframes_payload,
+        "flagged_count": flagged,
+    })
+    approved = job.wait_for_approval(timeout=1800)
+    if not approved:
+        raise RuntimeError("Continuity approval timed out after 30 minutes")
+    # Stills approved → caller continues into clip generation (M3).
+
+
+def regenerate_cinematic_keyframe(job: Job, kf_id: str, image_prompt: str | None = None) -> dict:
+    """Reshoot a single keyframe still during the continuity gate (C6), re-run its drift
+    check, and patch the live approval payload in place. Returns the updated entry."""
+    ctx = getattr(job, "cinematic_ctx", None)
+    if not ctx:
+        raise RuntimeError("This job has no cinematic keyframe context to regenerate from.")
+
+    shot = next((s for s in ctx["shots"] if s.get("kf_id") == kf_id), None)
+    if shot is None:
+        raise RuntimeError(f"Unknown keyframe id: {kf_id}")
+    if image_prompt:
+        shot = {**shot, "image_prompt": image_prompt}
+
+    dest = str(Path(ctx["keyframes_dir"]) / f"{kf_id}.png")
+    res = KeyframeGenerator().regenerate(
+        shot, ctx["style_lock"], ctx["reference_path"], ctx.get("char_sheet"), dest, ctx["strategy"],
+    )
+    if not res.success:
+        raise RuntimeError(f"Keyframe regeneration failed: {res.error}")
+
+    verdict = ContinuityChecker()._check_one(dest, ctx["reference_paths"])
+    updated = {
+        "kf_id": kf_id,
+        "filename": f"{kf_id}.png",
+        "image_prompt": shot.get("image_prompt", ""),
+        "success": True,
+        "error": None,
+        "verdict": verdict,
+    }
+
+    # Patch the live approval payload so the modal reflects the reshoot.
+    data = job.approval_data or {}
+    keyframes = data.get("keyframes", [])
+    for k in keyframes:
+        if k["kf_id"] == kf_id:
+            k.update(updated)
+            k.setdefault("scene", shot.get("scene"))
+            break
+    data["flagged_count"] = _flagged_count(keyframes)
+    job.approval_data = data
+    return {**updated, "flagged_count": data["flagged_count"]}
+
+
+# ── Cinematic M3: clip generation (still → video, provider-selectable) ─────────
+
+# Veo native audio / any provider speech is unwanted — we lay ElevenLabs VO over
+# silent clips. Passed as a negative prompt to keep the generated clips silent.
+_CINEMATIC_NO_SPEECH = (
+    "speech, narration, voiceover, talking, dialogue, spoken words, "
+    "singing, lip movement, subtitles, captions"
+)
+
+
+def _generate_video_clip(provider: str, *, prompt: str, dest_path: str,
+                         image_path: str | None = None,
+                         reference_image_paths: list[str] | None = None,
+                         tail_image_path: str | None = None,
+                         negative_prompt: str = "", duration: int = 5,
+                         vertex_project_id: str | None = None,
+                         vertex_location: str = "us-central1",
+                         veo_model: str | None = None,
+                         fal_endpoint: str | None = None,
+                         ws_model: str | None = None) -> ToolResult:
+    """Route ONE clip generation to the configured AI video provider (veo3 | fal |
+    wavespeed) — used by every AI reel type. fal/wavespeed are image-to-video and need a
+    first-frame image; for text-only scenes they fall back to Veo when Vertex is set."""
+    provider = (provider or "veo3").lower()
+    first_img = image_path or (reference_image_paths[0] if reference_image_paths else None)
+
+    if provider in ("fal", "wavespeed") and not first_img:
+        if vertex_project_id:
+            provider = "veo3"   # text-only scene — only Veo does pure text-to-video
+        else:
+            return ToolResult(success=False, error=(
+                f"{provider} is image-to-video and this scene has no reference image — "
+                "switch the AI video model to Google (Veo) for text-only reels."))
+
+    if provider == "fal":
+        payload = {
+            "operation": "image_to_video", "endpoint": fal_endpoint,
+            "image_url": FalClient.encode_image(first_img), "prompt": prompt,
+            "duration": duration, "aspect_ratio": "9:16",
+            "negative_prompt": negative_prompt, "dest_path": dest_path,
+        }
+        if tail_image_path:
+            payload["tail_image_url"] = FalClient.encode_image(tail_image_path)
+        return FalClient().execute(payload)
+
+    if provider == "wavespeed":
+        return WaveSpeedClient().execute({
+            "operation": "image_to_video", "model_slug": ws_model,
+            "image_url": FalClient.encode_image(first_img), "prompt": prompt,
+            "dest_path": dest_path,
+        })
+
+    # veo3 — full capability: text-to-video, first-frame image, multi-reference.
+    return Veo3Client().execute({
+        "operation": "text_to_video", "prompt": prompt, "dest_path": dest_path,
+        "vertex_project_id": vertex_project_id, "vertex_location": vertex_location,
+        "image_path": image_path, "reference_image_paths": reference_image_paths,
+        "model": veo_model, "negative_prompt": negative_prompt,
+    })
+
+
+def _run_cinematic_clips(job: Job, params: dict, project_dir: Path, project_id: str,
+                         storyboard: dict) -> None:
+    """Turn each approved keyframe still into a short silent clip via the settings-selected
+    provider (veo3 | fal | wavespeed). needs_end_frame shots get a generated end still and
+    first-last interpolation (fal). Stops at the M3 boundary before edit/compose/grade."""
+    ctx = getattr(job, "cinematic_ctx", {}) or {}
+    shots = storyboard.get("shots", [])
+    style_lock = storyboard.get("style_lock", "")
+    keyframes_dir = Path(ctx.get("keyframes_dir") or (project_dir / "keyframes"))
+    reference_path = ctx.get("reference_path") or params.get("character_image_path")
+    char_sheet = ctx.get("char_sheet")
+    clips_dir = project_dir / "clips"
+    clips_dir.mkdir(parents=True, exist_ok=True)
+
+    # Global AI video provider (shared with the other reel types) — set in Settings.
+    provider = (settings_manager.get("ai_video_provider", "veo3") or "veo3").lower()
+    vx_project = settings_manager.get("vertex_project_id")
+    vx_location = settings_manager.get("vertex_location", "us-central1")
+    veo_model = settings_manager.get("veo_standard_model") or "veo-3.1-lite-generate-001"
+    fal_endpoint = settings_manager.get("fal_video_endpoint") or "fal-ai/kling-video/v2.1/pro/image-to-video"
+    ws_model = settings_manager.get("wavespeed_video_model") or "wavespeed-ai/wan-i2v-480p"
+    if provider == "veo3" and not vx_project:
+        raise RuntimeError("AI video provider is Google (Veo) but Google Cloud Project ID is not set in Settings.")
+    if provider == "fal":
+        os.environ.setdefault("FAL_API_KEY", os.getenv("FAL_API_KEY", "") or settings_manager.get("fal_api_key", ""))
+    elif provider == "wavespeed":
+        os.environ.setdefault("WAVESPEED_API_KEY", os.getenv("WAVESPEED_API_KEY", "") or settings_manager.get("wavespeed_api_key", ""))
+
+    job.begin_stage("clip_generation", "Generating Clips", f"{provider} · still → video per shot...")
+    job.update(progress_pct=32)
+
+    # Only shots whose start still actually exists on disk.
+    tasks = [(i, shot, str(keyframes_dir / f"{shot.get('kf_id', f'KF{i + 1}')}.png"))
+             for i, shot in enumerate(shots)
+             if (keyframes_dir / f"{shot.get('kf_id', f'KF{i + 1}')}.png").exists()]
+    n = len(tasks)
+    if n < 2:
+        raise RuntimeError("Fewer than 2 approved keyframe stills available — cannot generate clips.")
+
+    def _gen(task: tuple) -> tuple:
+        i, shot, still_path = task
+        kf_id = shot.get("kf_id", f"KF{i + 1}")
+        video_prompt = f"{shot.get('video_prompt', '').strip()}. STYLE: {style_lock}".strip()
+        dest = str(clips_dir / f"clip_{i:03d}_{kf_id}.mp4")
+
+        # End frame for needs_end_frame shots (first-last interpolation; fal only).
+        end_still = None
+        if shot.get("needs_end_frame") and provider == "fal":
+            end_dest = str(keyframes_dir / f"{kf_id}_end.png")
+            er = KeyframeGenerator().generate_end_frame(shot, style_lock, reference_path, char_sheet, end_dest)
+            if er.success:
+                end_still = end_dest
+
+        res = _generate_video_clip(
+            provider, prompt=video_prompt, dest_path=dest,
+            image_path=still_path, tail_image_path=end_still,
+            negative_prompt=_CINEMATIC_NO_SPEECH, duration=5,
+            vertex_project_id=vx_project, vertex_location=vx_location,
+            veo_model=veo_model, fal_endpoint=fal_endpoint, ws_model=ws_model,
+        )
+        return i, shot, dest, res
+
+    clip_entries_raw: dict[int, dict] = {}
+    errors: list[str] = []
+    done = 0
+    with ThreadPoolExecutor(max_workers=4) as pool:
+        futures = [pool.submit(_gen, t) for t in tasks]
+        for fut in as_completed(futures):
+            i, shot, dest, res = fut.result()
+            done += 1
+            if not res.success:
+                errors.append(f"shot {i + 1}: {res.error}")
+                job.update(message=f"Clip {i + 1} failed: {res.error}")
+                continue
+            an = ClipAnalyzer().execute({"local_path": dest})
+            if not an.success:
+                errors.append(f"shot {i + 1}: clip analyze failed")
+                continue
+            clip_entries_raw[i] = {
+                "clip_id": f"clip_{i:03d}",
+                "filename": Path(dest).name,
+                "local_path": dest,
+                "duration_seconds": float(an.data["duration_seconds"]),
+                "resolution": {"width": an.data["width"], "height": an.data["height"]},
+                "fps": an.data["fps"],
+                "scene": shot.get("scene", i + 1),
+                "kf_id": shot.get("kf_id"),
+                "provider": provider,
+            }
+            job.update(progress_pct=32 + int((done / n) * 40), message=f"Generated {done}/{n} clips")
+
+    clip_entries = [clip_entries_raw[i] for i in sorted(clip_entries_raw)]
+    balance_err = next((e for e in errors if any(w in e.lower() for w in ("balance", "locked", "exhaust"))), None)
+    if balance_err:
+        job.update(message="⚠ fal balance exhausted — some clips skipped. Top up at fal.ai/dashboard/billing.")
+    if len(clip_entries) < 2:
+        first = balance_err or (errors[0] if errors else "unknown error")
+        raise RuntimeError(f"Only {len(clip_entries)}/{n} cinematic clips generated — need at least 2. {first}")
+
+    clip_manifest = {
+        "version": "1.0",
+        "provider": provider,
+        "clips": clip_entries,
+        "total_available_duration_seconds": sum(c["duration_seconds"] for c in clip_entries),
+    }
+    (project_dir / "clip_manifest.json").write_text(json.dumps(clip_manifest, indent=2))
+    job.end_stage("clip_generation", f"{len(clip_entries)} clips generated via {provider}")
+    return clip_manifest
+
+
+# Per-unit USD price estimates (from real fal invoices, mid-2026). Tune to your rates.
+# IMPORTANT: image→video on fal/Kling bills PER SECOND of output, and every clip is
+# generated at CLIP_SECONDS (Kling's 5s floor) regardless of how much we keep after
+# trimming — so a clip costs CLIP_SECONDS × per-second rate.
+_CINEMATIC_CLIP_SECONDS = 5
+_CINEMATIC_PRICES = {
+    "director_call": 0.03,       # one Claude director call
+    "keyframe_image": 0.0398,    # Nano Banana per image (fal actual) — still / sheet / end frame
+    "continuity_check": 0.01,    # Claude-vision per still
+    "vo_line": 0.05,             # ElevenLabs per spoken line
+    # per-second video rates → clip cost = rate × _CINEMATIC_CLIP_SECONDS
+    "clip_per_sec": {"veo3": 0.075, "fal": 0.098, "wavespeed": 0.020},
+}
+
+
+def _estimate_cinematic_cost(provider: str, n_stills: int, n_sheet: int, n_end: int,
+                             n_continuity: int, n_clips: int, n_vo: int) -> dict:
+    p = _CINEMATIC_PRICES
+    secs = _CINEMATIC_CLIP_SECONDS
+    clip_unit = p["clip_per_sec"].get(provider, 0.098) * secs   # per clip = rate × clip seconds
+    rows = [
+        ("Director (Claude)", 1, p["director_call"]),
+        ("Keyframe stills (Nano Banana)", n_stills + n_sheet + n_end, p["keyframe_image"]),
+        ("Continuity checks (Claude vision)", n_continuity, p["continuity_check"]),
+        (f"Clips ({provider}, {secs}s each)", n_clips, clip_unit),
+        ("Voiceover (ElevenLabs)", n_vo, p["vo_line"]),
+    ]
+    out = [{"stage": s, "units": u, "unit_cost": round(c, 3), "subtotal": round(u * c, 3)} for s, u, c in rows]
+    return {
+        "currency": "USD",
+        "note": (f"Estimate. Video bills per second × {secs}s/clip — most fal/Kling spend is here. "
+                 "Tune rates in ai_runner._CINEMATIC_PRICES."),
+        "rows": out,
+        "total": round(sum(r["subtotal"] for r in out), 2),
+    }
+
+
+def _capture_cinematic_inputs(storyboard: dict, provider: str, kf_endpoint: str, clip_model: str) -> dict:
+    """Record exactly what was authored and what was sent to each model, for the
+    'Review inputs' panel on the finished reel."""
+    style_lock = storyboard.get("style_lock", "")
+    kg = KeyframeGenerator()
+    shots = []
+    for s in storyboard.get("shots", []):
+        shots.append({
+            "kf_id": s.get("kf_id"), "scene": s.get("scene"),
+            "shot_type": s.get("shot_type"), "lens_mm": s.get("lens_mm"),
+            "dof": s.get("dof"), "camera_move": s.get("camera_move"),
+            "duration_sec": s.get("duration_sec"), "needs_end_frame": s.get("needs_end_frame"),
+            "image_prompt": s.get("image_prompt", ""),
+            "still_prompt_sent": kg._still_prompt(s, style_lock),
+            "video_prompt": s.get("video_prompt", ""),
+            "clip_prompt_sent": f"{s.get('video_prompt', '').strip()}. STYLE: {style_lock}".strip(),
+            "vo_text": s.get("vo_text", ""), "overlay_text": s.get("overlay_text", ""),
+        })
+    return {
+        "style_lock": style_lock,
+        "reference_image": storyboard.get("reference_image"),
+        "provider": provider,
+        "models": {"director": "claude-sonnet-4-6", "keyframe": kf_endpoint, "clip": clip_model},
+        "shots": shots,
+    }
+
+
+def _run_cinematic_finish(job: Job, params: dict, project_dir: Path, project_id: str,
+                          storyboard: dict, clip_manifest: dict) -> None:
+    """M4 + M5 — VO-driven edit decisions, cross-shot colour match, compose, QA, deliver.
+    Rejoins the same edit/compose/audio tooling the other AI modes use."""
+    from backend import edit_planner
+    from backend.pipeline_runner import (
+        _generate_scene_vo_files, _compute_scene_text_timing, _resolve_music,
+    )
+
+    scenes = storyboard.get("scenes", [])
+    shots = storyboard.get("shots", [])
+    target_dur = round(sum(float(s.get("duration_sec", 0)) for s in shots), 1) or \
+        float(params.get("target_duration_seconds", 16))
+
+    clips_dir = project_dir / "clips"
+    tmp_dir = project_dir / "tmp"
+    output_dir = project_dir / "output"
+    voiceover_dir = project_dir / "voiceover"
+    for d in [tmp_dir / "normalized", tmp_dir / "graded", output_dir, voiceover_dir]:
+        d.mkdir(parents=True, exist_ok=True)
+
+    # ── STAGE: voiceover (per-shot ElevenLabs; drives shot duration, C5) ───────
+    job.begin_stage("voiceover", "Generating Voiceover", "Sending shot narration to ElevenLabs...")
+    job.update(progress_pct=74)
+    scene_vo_files: dict[int, str] = {}
+    scene_vo_durations: dict[int, float] = {}
+    if params.get("include_voiceover", True):
+        elevenlabs_key = os.getenv("ELEVENLABS_API_KEY", "") or settings_manager.get("elevenlabs_api_key", "")
+        if elevenlabs_key and any(s.get("voiceover") for s in scenes):
+            scene_vo_files, scene_vo_durations = _generate_scene_vo_files(scenes, voiceover_dir)
+            job.end_stage("voiceover", f"{len(scene_vo_files)} shot voiceovers — clips trimmed to VO length")
+        else:
+            job.end_stage("voiceover", "No voiceover (no ElevenLabs key or empty narration)")
+    else:
+        job.end_stage("voiceover", "Voiceover disabled — skipping")
+
+    # ── STAGE: edit_decisions (VO-driven durations, C5) ────────────────────────
+    job.begin_stage("edit_decisions", "Planning the Edit", "Timing each shot to its voiceover...")
+    job.update(progress_pct=78)
+    # Keep only VO for shots that actually have a clip.
+    present_scenes = {c["scene"] for c in clip_manifest["clips"] if c.get("scene")}
+    if scene_vo_files:
+        scene_vo_files = {k: v for k, v in scene_vo_files.items() if k in present_scenes}
+        scene_vo_durations = {k: v for k, v in scene_vo_durations.items() if k in present_scenes}
+    edit_decisions = edit_planner.plan_edit(
+        clip_manifest, scenes, target_dur,
+        scene_vo_durations=scene_vo_durations or None,
+    )
+    job.end_stage("edit_decisions",
+                  f"{len(edit_decisions['cuts'])} cuts · {edit_decisions['total_duration_seconds']:.1f}s")
+
+    # ── STAGE: compose (normalize → colour match → concat → text → audio) ──────
+    job.begin_stage("compose", "Composing Reel", "Normalizing clips...")
+    job.update(progress_pct=82)
+    clip_by_id = {c["clip_id"]: c for c in clip_manifest["clips"]}
+    cuts_ordered = sorted(edit_decisions["cuts"], key=lambda x: x["order"])
+
+    # Honour the director's per-shot transition_out for edit variety (#5): a real
+    # dissolve where asked, hard cut otherwise. When any dissolve exists the whole
+    # timeline composes via xfade, so hard cuts get a ~2-frame micro-fade and their
+    # transition_duration is set so VO/text timing (which subtract it) stay in sync.
+    scene_by_num = {s["scene"]: s for s in scenes}
+
+    def _trans_out(cut: dict) -> str:
+        return (scene_by_num.get(cut.get("scene"), {}) or {}).get("transition_out", "cut")
+
+    has_dissolve = any(_trans_out(c) == "dissolve" for c in cuts_ordered)
+    CUT_FADE = 0.067 if has_dissolve else 0.0  # micro-fade only matters on the xfade path
+
+    normalized_by_order: dict[int, dict] = {}
+    for cut in cuts_ordered:
+        clip = clip_by_id[cut["clip_id"]]
+        norm_path = str(tmp_dir / "normalized" / f"{cut['order']:02d}_{cut['clip_id']}.mp4")
+        nr = VideoNormalizer().execute({
+            "input_path": clip["local_path"], "output_path": norm_path,
+            "trim_in": cut["trim_in"], "trim_out": cut["trim_out"],
+        })
+        if not nr.success:
+            raise RuntimeError(f"Normalize failed for {clip['filename']}: {nr.error}")
+        is_dissolve = _trans_out(cut) == "dissolve"
+        normalized_by_order[cut["order"]] = {
+            "path": norm_path,
+            "duration_seconds": cut["trim_out"] - cut["trim_in"],
+            "transition": "dissolve" if is_dissolve else "hard_cut",
+            "transition_duration": 0.5 if is_dissolve else CUT_FADE,
+        }
+    normalized_clips = [normalized_by_order[i] for i in sorted(normalized_by_order)]
+
+    # Colour match across all clips (C4), before concat.
+    job.update(progress_pct=86, message="Colour-matching shots for a consistent grade...")
+    try:
+        graded_paths = ColorMatcher().match([c["path"] for c in normalized_clips], str(tmp_dir / "graded"))
+        for c, gp in zip(normalized_clips, graded_paths):
+            c["path"] = gp
+    except Exception as exc:
+        job.update(message=f"Colour match skipped ({exc}) — composing ungraded")
+
+    job.update(progress_pct=88, message=f"Joining {len(normalized_clips)} clips...")
+    composed_path = str(tmp_dir / "composed.mp4")
+    cr = VideoComposer().execute({"clips": normalized_clips, "output_path": composed_path})
+    if not cr.success:
+        raise RuntimeError(f"Composition failed: {cr.error}")
+
+    titled_path = composed_path
+    scene_text = _compute_scene_text_timing(normalized_clips, cuts_ordered, scenes)
+    if scene_text and params.get("include_text", True):
+        titled_path = str(tmp_dir / "titled.mp4")
+        tr = TextRenderer().execute({"input_path": composed_path, "output_path": titled_path, "scenes": scene_text})
+        if not tr.success:
+            titled_path = composed_path
+            job.update(message=f"Text overlay skipped: {tr.error}")
+
+    voiceover_path = None
+    if scene_vo_files:
+        job.update(progress_pct=90, message="Syncing voiceover to the timeline...")
+        # Account for crossfade overlap (each boundary shortens the timeline by its
+        # transition_duration) so VO start times match the composed video.
+        video_duration = (sum(c["duration_seconds"] for c in normalized_clips)
+                          - sum(c["transition_duration"] for c in normalized_clips[:-1]))
+        voiceover_path = edit_planner.build_positioned_voiceover(
+            scene_vo_files=scene_vo_files, normalized_clips=normalized_clips,
+            cuts_ordered=cuts_ordered, voiceover_dir=voiceover_dir, total_duration=video_duration,
+        )
+
+    job.update(progress_pct=92, message="Mixing voiceover and music...")
+    final_path = str(output_dir / "ai_reel_final.mp4")
+    mr = AudioMixer().execute({
+        "video_path": titled_path, "output_path": final_path,
+        "voiceover_path": voiceover_path, "music_path": _resolve_music(params.get("music_file")),
+        "duck_original": True,
+    })
+    if not mr.success:
+        raise RuntimeError(f"Audio mix failed: {mr.error}")
+    job.end_stage("compose", "Reel composed and graded")
+
+    # ── STAGE: final_review (QA) ───────────────────────────────────────────────
+    job.begin_stage("final_review", "Quality Review", "Checking resolution and duration...")
+    job.update(progress_pct=96)
+    probe = VideoProber().execute({"path": final_path})
+    probe_data = probe.data if probe.success else {}
+    FrameSampler().execute({"video_path": final_path, "output_dir": str(project_dir / "review" / "frames"), "num_frames": 4})
+    actual_dur = probe_data.get("duration_seconds", 0)
+    if probe_data.get("width") != 1080 or probe_data.get("height") != 1920:
+        raise RuntimeError(
+            f"Final review failed: resolution {probe_data.get('width')}x{probe_data.get('height')}, expected 1080x1920"
+        )
+    job.end_stage("final_review", "All quality checks passed")
+
+    # ── STAGE: deliver ─────────────────────────────────────────────────────────
+    job.begin_stage("deliver", "Ready!", "Your cinematic reel is ready")
+    job.update(progress_pct=99)
+    file_size = Path(final_path).stat().st_size if Path(final_path).exists() else 0
+    local_copy_path = _copy_to_local_output(project_dir, project_id)
+
+    # ── Cost estimate + input capture (C6 / review) ────────────────────────────
+    provider = clip_manifest.get("provider", "fal")
+    km_path = project_dir / "keyframe_manifest.json"
+    km = json.loads(km_path.read_text()) if km_path.exists() else {}
+    n_stills = sum(1 for k in km.get("keyframes", []) if k.get("success"))
+    n_sheet = 1 if km.get("character_sheet") else 0
+    n_end = len(list((project_dir / "keyframes").glob("*_end.png")))
+    n_continuity = len(km.get("verdicts", {}))
+    n_clips = len(clip_manifest.get("clips", []))
+    n_vo = len(scene_vo_files)
+    _kg = KeyframeGenerator()
+    kf_endpoint = f"{_kg.provider}:{_kg.model}"
+    clip_model = (settings_manager.get("fal_video_endpoint") if provider == "fal"
+                  else settings_manager.get("veo_standard_model") if provider == "veo3"
+                  else settings_manager.get("wavespeed_video_model"))
+    review = {
+        "cost": _estimate_cinematic_cost(provider, n_stills, n_sheet, n_end, n_continuity, n_clips, n_vo),
+        "inputs": _capture_cinematic_inputs(storyboard, provider, kf_endpoint, clip_model or ""),
+    }
+    (project_dir / "cost_log.json").write_text(json.dumps(review["cost"], indent=2))
+    (project_dir / "cinematic_inputs.json").write_text(json.dumps(review["inputs"], indent=2))
+
+    job.end_stage("deliver", f"Done · est. ${review['cost']['total']:.2f}")
+    job.update(
+        status=JobStatus.COMPLETED, progress_pct=100,
+        message="Cinematic reel ready!" + (f" Saved to {local_copy_path}" if local_copy_path else ""),
+        result={
+            "project_id": project_id, "milestone": "M5", "reel_type": "cinematic",
+            "output_path": final_path, "local_copy_path": local_copy_path,
+            "duration_seconds": actual_dur, "file_size_bytes": file_size,
+            "clips_used": len(normalized_clips), "provider": provider,
+            "voiceover": voiceover_path is not None, "source": "cinematic",
+            "estimated_cost": review["cost"]["total"],
+            "review": review,
+            "scenes": [{"scene": s["scene"], "overlay_text": s.get("overlay_text", ""),
+                        "voiceover": s.get("voiceover", "")} for s in scenes],
+        },
+    )
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# PAUSE-DRIVEN CINEMATIC EDIT (audio is the master timeline)
+# Order: VO first → detect pauses → each speech beat is a visual unit → generate
+# keyframes/clips per beat → cut on the pauses, full VO laid over (no truncation).
+# ══════════════════════════════════════════════════════════════════════════════
+
+def _cinematic_clip_seconds(provider: str) -> int:
+    """How long each generated clip is for this provider — used both to cap beat
+    splitting and as the generation duration, so a clip is never shorter than the
+    segment it must cover (which would desync the VO)."""
+    return 8 if provider == "veo3" else 5
+
+
+def _concat_vo_files(paths: list[str], dest_path: str) -> str | None:
+    """Concatenate per-shot VO mp3s (in order) into one continuous narration.
+    The natural trailing silence in each file preserves the pauses between shots."""
+    paths = [p for p in paths if p and Path(p).exists()]
+    if not paths:
+        return None
+    if len(paths) == 1:
+        return paths[0]
+    list_path = Path(dest_path).with_suffix(".txt")
+    list_path.write_text("".join(f"file '{p}'\n" for p in paths), encoding="utf-8")
+    r = subprocess.run(
+        ["ffmpeg", "-nostdin", "-y", "-f", "concat", "-safe", "0",
+         "-i", str(list_path), "-c:a", "libmp3lame", "-q:a", "2", dest_path],
+        capture_output=True, text=True, stdin=subprocess.DEVNULL, timeout=180,
+    )
+    list_path.unlink(missing_ok=True)
+    return dest_path if r.returncode == 0 else paths[0]
+
+
+def _run_cinematic_plan(job: Job, params: dict, project_dir: Path, storyboard: dict,
+                        scenes: list[dict]) -> tuple:
+    """VO FIRST: generate per-shot narration, detect its pauses, and build the
+    render plan (beats → clips). Returns (render_plan, vo_concat_path, total_sec).
+    Returns (None, None, 0) when there's no voiceover — caller falls back to the
+    original shot-per-clip flow."""
+    from backend.pipeline_runner import _generate_scene_vo_files
+    from tools.audio.pause_detector import detect_beats, beats_to_segments
+    from tools.ai.cinematic_planner import build_render_plan, plan_summary
+
+    if not params.get("include_voiceover", True):
+        return None, None, 0.0
+    elevenlabs_key = os.getenv("ELEVENLABS_API_KEY", "") or settings_manager.get("elevenlabs_api_key", "")
+    if not (elevenlabs_key and any(s.get("voiceover") for s in scenes)):
+        return None, None, 0.0
+
+    shots = storyboard.get("shots", [])
+    voiceover_dir = project_dir / "voiceover"
+    voiceover_dir.mkdir(parents=True, exist_ok=True)
+
+    job.begin_stage("voiceover", "Generating Voiceover", "Recording narration to time the cuts...")
+    job.update(progress_pct=6)
+    scene_vo_files, scene_vo_durations = _generate_scene_vo_files(scenes, voiceover_dir)
+    if not scene_vo_files:
+        job.end_stage("voiceover", "No voiceover produced — using structural timing")
+        return None, None, 0.0
+
+    provider = (settings_manager.get("ai_video_provider", "veo3") or "veo3").lower()
+    clip_secs = _cinematic_clip_seconds(provider)
+
+    # Detect each shot's pauses → segments that tile the shot's full VO length.
+    shot_segments: dict[int, list[dict]] = {}
+    ordered_vo_paths: list[str] = []
+    for i, shot in enumerate(shots):
+        scene_num = shot.get("scene", i + 1)
+        vo_path = scene_vo_files.get(scene_num)
+        if not vo_path:
+            continue
+        ordered_vo_paths.append(vo_path)
+        dur = scene_vo_durations.get(scene_num, 0.0)
+        det = detect_beats(vo_path)
+        segs = beats_to_segments(det["beats"], det["total_duration"] or dur)
+        shot_segments[i] = segs
+
+    render_plan = build_render_plan(shots, shot_segments, max_clip_seconds=float(clip_secs))
+    if len(render_plan) < 2:
+        job.end_stage("voiceover", "Too few beats for pause-driven edit — using structural timing")
+        return None, None, 0.0
+
+    vo_concat = _concat_vo_files(ordered_vo_paths, str(voiceover_dir / "narration_full.mp3"))
+    total_sec = round(sum(u["target_duration"] for u in render_plan), 2)
+    summ = plan_summary(render_plan)
+    job.end_stage("voiceover",
+                  f"{len(scene_vo_files)} shot VOs · {summ['clips']} beats "
+                  f"({summ['continuation_stills']} continuation) · {total_sec:.1f}s")
+    return render_plan, vo_concat, total_sec
+
+
+def _run_cinematic_continuation_stills(job: Job, project_dir: Path, storyboard: dict,
+                                       render_plan: list[dict]) -> None:
+    """Generate the extra 'continuation' stills for beats beyond a shot's first
+    (same shot content, fresh still) so the look stays coherent across the cuts."""
+    cont = [u for u in render_plan if u["is_continuation"]]
+    if not cont:
+        return
+    ctx = getattr(job, "cinematic_ctx", {}) or {}
+    keyframes_dir = Path(ctx.get("keyframes_dir") or (project_dir / "keyframes"))
+    style_lock = ctx.get("style_lock", storyboard.get("style_lock", ""))
+    reference_path = ctx.get("reference_path")
+    char_sheet = ctx.get("char_sheet")
+    strategy = ctx.get("strategy", "sheet")
+    shots = storyboard.get("shots", [])
+
+    kg = KeyframeGenerator()
+    refs = kg._refs_for(strategy, reference_path, char_sheet, None)
+    job.begin_stage("continuation_stills", "Continuation Stills",
+                    f"{len(cont)} extra stills for long / multi-beat shots...")
+    job.update(progress_pct=28)
+
+    def _gen(u):
+        shot = shots[u["shot_index"]]
+        dest = str(keyframes_dir / f"{u['still_id']}.png")
+        return u, kg.generate_one(shot, style_lock, refs, dest)
+
+    done = 0
+    with ThreadPoolExecutor(max_workers=4) as pool:
+        futures = [pool.submit(_gen, u) for u in cont]
+        for fut in as_completed(futures):
+            u, res = fut.result()
+            done += 1
+            job.update(message=f"Continuation still {done}/{len(cont)} ({u['still_id']})"
+                               + ("" if res.success else " — failed"))
+    job.end_stage("continuation_stills", f"{done} continuation stills generated")
+
+
+def _run_cinematic_clips_planned(job: Job, params: dict, project_dir: Path,
+                                 storyboard: dict, render_plan: list[dict]) -> dict:
+    """Generate ONE clip per render unit (still → silent clip), enough to cover
+    every beat. Returns a clip_manifest keyed so build_edit_decisions can map it."""
+    ctx = getattr(job, "cinematic_ctx", {}) or {}
+    keyframes_dir = Path(ctx.get("keyframes_dir") or (project_dir / "keyframes"))
+    style_lock = storyboard.get("style_lock", "")
+    shots = storyboard.get("shots", [])
+    clips_dir = project_dir / "clips"
+    clips_dir.mkdir(parents=True, exist_ok=True)
+
+    provider = (settings_manager.get("ai_video_provider", "veo3") or "veo3").lower()
+    clip_secs = _cinematic_clip_seconds(provider)
+    vx_project = settings_manager.get("vertex_project_id")
+    vx_location = settings_manager.get("vertex_location", "us-central1")
+    veo_model = settings_manager.get("veo_standard_model") or "veo-3.1-lite-generate-001"
+    fal_endpoint = settings_manager.get("fal_video_endpoint") or "fal-ai/kling-video/v2.1/pro/image-to-video"
+    ws_model = settings_manager.get("wavespeed_video_model") or "wavespeed-ai/wan-i2v-480p"
+    if provider == "veo3" and not vx_project:
+        raise RuntimeError("AI video provider is Google (Veo) but Google Cloud Project ID is not set in Settings.")
+    if provider == "fal":
+        os.environ.setdefault("FAL_API_KEY", os.getenv("FAL_API_KEY", "") or settings_manager.get("fal_api_key", ""))
+    elif provider == "wavespeed":
+        os.environ.setdefault("WAVESPEED_API_KEY", os.getenv("WAVESPEED_API_KEY", "") or settings_manager.get("wavespeed_api_key", ""))
+
+    units = [u for u in render_plan if (keyframes_dir / f"{u['still_id']}.png").exists()]
+    n = len(units)
+    if n < 2:
+        raise RuntimeError("Fewer than 2 stills available for the pause-driven edit — cannot generate clips.")
+
+    job.begin_stage("clip_generation", "Generating Clips", f"{provider} · one clip per beat...")
+    job.update(progress_pct=34)
+
+    def _gen(u):
+        shot = shots[u["shot_index"]]
+        still = str(keyframes_dir / f"{u['still_id']}.png")
+        video_prompt = f"{shot.get('video_prompt', '').strip()}. STYLE: {style_lock}".strip()
+        dest = str(clips_dir / f"clip_{u['order']:03d}_{u['still_id']}.mp4")
+        res = _generate_video_clip(
+            provider, prompt=video_prompt, dest_path=dest, image_path=still,
+            negative_prompt=_CINEMATIC_NO_SPEECH, duration=clip_secs,
+            vertex_project_id=vx_project, vertex_location=vx_location,
+            veo_model=veo_model, fal_endpoint=fal_endpoint, ws_model=ws_model,
+        )
+        return u, dest, res
+
+    entries_raw: dict[int, dict] = {}
+    errors: list[str] = []
+    done = 0
+    with ThreadPoolExecutor(max_workers=4) as pool:
+        futures = [pool.submit(_gen, u) for u in units]
+        for fut in as_completed(futures):
+            u, dest, res = fut.result()
+            done += 1
+            if not res.success:
+                errors.append(f"beat {u['order']}: {res.error}")
+                job.update(message=f"Clip {done}/{n} failed: {res.error}")
+                continue
+            an = ClipAnalyzer().execute({"local_path": dest})
+            if not an.success:
+                errors.append(f"beat {u['order']}: analyze failed")
+                continue
+            entries_raw[u["order"]] = {
+                "clip_id": f"clip_{u['order']:03d}",
+                "still_id": u["still_id"],
+                "filename": Path(dest).name,
+                "local_path": dest,
+                "duration_seconds": float(an.data["duration_seconds"]),
+                "resolution": {"width": an.data["width"], "height": an.data["height"]},
+                "fps": an.data["fps"],
+                "scene": u.get("scene"),
+                "provider": provider,
+            }
+            job.update(progress_pct=34 + int((done / n) * 38), message=f"Generated {done}/{n} clips")
+
+    clip_entries = [entries_raw[o] for o in sorted(entries_raw)]
+    balance_err = next((e for e in errors if any(w in e.lower() for w in ("balance", "locked", "exhaust"))), None)
+    if balance_err:
+        job.update(message="⚠ fal balance exhausted — top up at fal.ai/dashboard/billing.")
+    if len(clip_entries) < 2:
+        first = balance_err or (errors[0] if errors else "unknown error")
+        raise RuntimeError(f"Only {len(clip_entries)}/{n} clips generated — need at least 2. {first}")
+
+    clip_manifest = {"version": "1.0", "provider": provider, "clips": clip_entries,
+                     "total_available_duration_seconds": sum(c["duration_seconds"] for c in clip_entries)}
+    (project_dir / "clip_manifest.json").write_text(json.dumps(clip_manifest, indent=2))
+    job.end_stage("clip_generation", f"{len(clip_entries)} beat clips via {provider}")
+    return clip_manifest
+
+
+def _cinematic_text_timing(normalized_clips: list[dict], cuts: list[dict], scenes: list[dict]) -> list[dict]:
+    """Overlay each shot's text once, spanning that shot's beats (not per clip)."""
+    scene_over = {s["scene"]: (s.get("overlay_text") or "").strip() for s in scenes}
+    first_start: dict[int, float] = {}
+    span: dict[int, float] = {}
+    t = 0.0
+    for i, cut in enumerate(cuts):
+        sn = cut.get("scene")
+        d = normalized_clips[i]["duration_seconds"]
+        if sn not in first_start:
+            first_start[sn] = t
+            span[sn] = 0.0
+        span[sn] += d
+        t += d
+    out = []
+    for sn, start in first_start.items():
+        txt = scene_over.get(sn, "")
+        if not txt:
+            continue
+        dur = span[sn]
+        margin = min(0.5, dur * 0.15)
+        out.append({"text": txt, "start": round(start + margin, 2),
+                    "end": round(start + dur - margin, 2), "position": "bottom"})
+    return out
+
+
+def _run_cinematic_finish_planned(job: Job, params: dict, project_dir: Path, project_id: str,
+                                  storyboard: dict, clip_manifest: dict, render_plan: list[dict],
+                                  vo_concat_path: str | None) -> None:
+    """Assemble the pause-driven reel: cut on the pauses, lay the FULL narration over
+    the timeline (no truncation), colour-match, mix, QA, deliver."""
+    from backend.pipeline_runner import _resolve_music
+    from tools.ai.cinematic_planner import build_edit_decisions
+
+    scenes = storyboard.get("scenes", [])
+    tmp_dir = project_dir / "tmp"
+    output_dir = project_dir / "output"
+    for d in [tmp_dir / "normalized", tmp_dir / "graded", output_dir]:
+        d.mkdir(parents=True, exist_ok=True)
+
+    # ── edit_decisions: cut on the pauses (hard cuts, trims = beat segments) ──────
+    job.begin_stage("edit_decisions", "Planning the Edit", "Cutting on the voiceover pauses...")
+    job.update(progress_pct=76)
+    edit_decisions = build_edit_decisions(render_plan, clip_manifest)
+    cuts = sorted(edit_decisions["cuts"], key=lambda x: x["order"])
+    job.end_stage("edit_decisions",
+                  f"{len(cuts)} pause-aligned cuts · {edit_decisions['total_duration_seconds']:.1f}s")
+
+    # ── compose: normalize → colour match → concat → text → full VO + music ──────
+    job.begin_stage("compose", "Composing Reel", "Normalizing clips...")
+    job.update(progress_pct=82)
+    clip_by_id = {c["clip_id"]: c for c in clip_manifest["clips"]}
+    normalized_clips: list[dict] = []
+    for cut in cuts:
+        clip = clip_by_id[cut["clip_id"]]
+        norm_path = str(tmp_dir / "normalized" / f"{cut['order']:02d}_{cut['clip_id']}.mp4")
+        nr = VideoNormalizer().execute({
+            "input_path": clip["local_path"], "output_path": norm_path,
+            "trim_in": cut["trim_in"], "trim_out": cut["trim_out"],
+        })
+        if not nr.success:
+            raise RuntimeError(f"Normalize failed for {clip['filename']}: {nr.error}")
+        normalized_clips.append({
+            "path": norm_path, "duration_seconds": cut["trim_out"] - cut["trim_in"],
+            "transition": "hard_cut", "transition_duration": 0.0,
+        })
+
+    job.update(progress_pct=86, message="Colour-matching shots...")
+    try:
+        graded = ColorMatcher().match([c["path"] for c in normalized_clips], str(tmp_dir / "graded"))
+        for c, gp in zip(normalized_clips, graded):
+            c["path"] = gp
+    except Exception as exc:
+        job.update(message=f"Colour match skipped ({exc})")
+
+    job.update(progress_pct=88, message=f"Joining {len(normalized_clips)} clips...")
+    composed_path = str(tmp_dir / "composed.mp4")
+    cr = VideoComposer().execute({"clips": normalized_clips, "output_path": composed_path})
+    if not cr.success:
+        raise RuntimeError(f"Composition failed: {cr.error}")
+
+    titled_path = composed_path
+    scene_text = _cinematic_text_timing(normalized_clips, cuts, scenes)
+    if scene_text and params.get("include_text", True):
+        titled_path = str(tmp_dir / "titled.mp4")
+        tr = TextRenderer().execute({"input_path": composed_path, "output_path": titled_path, "scenes": scene_text})
+        if not tr.success:
+            titled_path = composed_path
+            job.update(message=f"Text overlay skipped: {tr.error}")
+
+    # Full narration laid over the timeline from t=0 — visual length == VO length,
+    # so nothing is truncated and the cuts already sit on the speech onsets.
+    job.update(progress_pct=92, message="Mixing narration and music...")
+    final_path = str(output_dir / "ai_reel_final.mp4")
+    mr = AudioMixer().execute({
+        "video_path": titled_path, "output_path": final_path,
+        "voiceover_path": vo_concat_path, "music_path": _resolve_music(params.get("music_file")),
+        "duck_original": True,
+    })
+    if not mr.success:
+        raise RuntimeError(f"Audio mix failed: {mr.error}")
+    job.end_stage("compose", "Reel composed and graded")
+
+    # ── QA ───────────────────────────────────────────────────────────────────────
+    job.begin_stage("final_review", "Quality Review", "Checking resolution and duration...")
+    job.update(progress_pct=96)
+    probe = VideoProber().execute({"path": final_path})
+    probe_data = probe.data if probe.success else {}
+    FrameSampler().execute({"video_path": final_path, "output_dir": str(project_dir / "review" / "frames"), "num_frames": 4})
+    actual_dur = probe_data.get("duration_seconds", 0)
+    if probe_data.get("width") != 1080 or probe_data.get("height") != 1920:
+        raise RuntimeError(
+            f"Final review failed: resolution {probe_data.get('width')}x{probe_data.get('height')}, expected 1080x1920")
+    job.end_stage("final_review", "All quality checks passed")
+
+    # ── deliver ────────────────────────────────────────────────────────────────
+    job.begin_stage("deliver", "Ready!", "Your cinematic reel is ready")
+    job.update(progress_pct=99)
+    file_size = Path(final_path).stat().st_size if Path(final_path).exists() else 0
+    local_copy_path = _copy_to_local_output(project_dir, project_id)
+
+    provider = clip_manifest.get("provider", "fal")
+    km_path = project_dir / "keyframe_manifest.json"
+    km = json.loads(km_path.read_text()) if km_path.exists() else {}
+    n_stills = sum(1 for k in km.get("keyframes", []) if k.get("success"))
+    n_cont = sum(1 for u in render_plan if u["is_continuation"])
+    n_sheet = 1 if km.get("character_sheet") else 0
+    n_continuity = len(km.get("verdicts", {}))
+    n_clips = len(clip_manifest.get("clips", []))
+    n_vo = len({u["scene"] for u in render_plan})
+    _kg = KeyframeGenerator()
+    kf_endpoint = f"{_kg.provider}:{_kg.model}"
+    clip_model = (settings_manager.get("fal_video_endpoint") if provider == "fal"
+                  else settings_manager.get("veo_standard_model") if provider == "veo3"
+                  else settings_manager.get("wavespeed_video_model"))
+    review = {
+        "cost": _estimate_cinematic_cost(provider, n_stills + n_cont, n_sheet, 0, n_continuity, n_clips, n_vo),
+        "inputs": _capture_cinematic_inputs(storyboard, provider, kf_endpoint, clip_model or ""),
+    }
+    (project_dir / "cost_log.json").write_text(json.dumps(review["cost"], indent=2))
+    (project_dir / "cinematic_inputs.json").write_text(json.dumps(review["inputs"], indent=2))
+
+    job.end_stage("deliver", f"Done · est. ${review['cost']['total']:.2f}")
+    job.update(
+        status=JobStatus.COMPLETED, progress_pct=100,
+        message="Cinematic reel ready!" + (f" Saved to {local_copy_path}" if local_copy_path else ""),
+        result={
+            "project_id": project_id, "milestone": "M5", "reel_type": "cinematic",
+            "output_path": final_path, "local_copy_path": local_copy_path,
+            "duration_seconds": actual_dur, "file_size_bytes": file_size,
+            "clips_used": len(normalized_clips), "provider": provider,
+            "voiceover": vo_concat_path is not None, "source": "cinematic",
+            "edit": "pause-driven",
+            "estimated_cost": review["cost"]["total"],
+            "review": review,
+            "scenes": [{"scene": s["scene"], "overlay_text": s.get("overlay_text", ""),
+                        "voiceover": s.get("voiceover", "")} for s in scenes],
+        },
+    )
 
 
 def _copy_to_local_output(project_dir: Path, project_id: str) -> str | None:

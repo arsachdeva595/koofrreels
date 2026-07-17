@@ -118,6 +118,28 @@ def detect_beats(
     return {"total_duration": round(total, 3), "beats": beats, "pauses": pauses}
 
 
+def beats_to_segments(beats: list[dict], total_duration: float) -> list[dict]:
+    """Turn speech beats into contiguous VISUAL segments that tile the whole audio.
+
+    Each segment holds one beat's visual from the moment that beat's speech starts
+    until the next beat's speech starts — i.e. it absorbs the trailing pause. So the
+    cut to the next visual lands exactly on the next speech onset (right after a
+    pause), and the segments sum to `total_duration` (visual length == audio length).
+    """
+    if total_duration <= 0:
+        return []
+    if not beats:
+        return [{"start": 0.0, "end": round(total_duration, 3), "duration": round(total_duration, 3)}]
+    segs: list[dict] = []
+    for i, b in enumerate(beats):
+        start = 0.0 if i == 0 else float(b["start"])
+        end = float(beats[i + 1]["start"]) if i + 1 < len(beats) else float(total_duration)
+        if end <= start:
+            continue
+        segs.append({"start": round(start, 3), "end": round(end, 3), "duration": round(end - start, 3)})
+    return segs
+
+
 def plan_beat_clips(beats: list[dict], max_clip_seconds: float = 8.0) -> list[dict]:
     """Split each speech beat into one or more clip units so a beat longer than a
     single model clip (e.g. Veo3's 8s cap) is covered by multiple chained clips.
