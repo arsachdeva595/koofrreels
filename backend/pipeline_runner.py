@@ -635,7 +635,21 @@ Excitement → "person jumping, arms raised, bright open space"
     _no_characters = _is_ai_reels and reel_brief.get("reel_type") == "none"
     _is_product = _is_ai_reels and reel_brief.get("reel_type") == "product"
     _is_ugc = _is_ai_reels and reel_brief.get("reel_type") == "ugc"
+    _is_character = _is_ai_reels and reel_brief.get("reel_type") == "character"
     _product_desc = reel_brief.get("product_description", "")
+    _char_desc = reel_brief.get("character_description", "")
+
+    # Character / UGC: lock the script to the ACTUAL uploaded person so it never
+    # contradicts the reference (e.g. a man ref must not become "a woman" in the script).
+    _character_section = (f"""
+ON-CAMERA PERSON — MATCH THE UPLOADED REFERENCE EXACTLY:
+The person on camera is a specific real individual from the reference image:
+  {_char_desc}
+- EVERY visual_description featuring a person MUST depict THIS person — match their gender,
+  age range and look. Refer to them consistently (e.g. "the man", "he") based on the description above.
+- Never describe a different gender, age, or appearance than the reference. When unsure, say
+  "the creator" / "the person" rather than inventing details.
+""") if ((_is_character or _is_ugc) and _char_desc) else ""
 
     _product_section = (f"""
 PRODUCT MODE — BUILD THE STORY AROUND THIS PRODUCT:
@@ -656,10 +670,12 @@ this product, talking to the camera like a genuine personal recommendation:
   PRODUCT: {_product_desc or '(see the topic/prompt)'}
 - Write the voiceover as a FIRST-PERSON, casual, authentic creator monologue — never an ad
   voiceover. Use natural spoken language ("okay so", "honestly", "wait — look at this").
-- The SAME creator appears in EVERY scene, holding / using / showing the product to camera.
+- The SAME creator (the exact person described in the ON-CAMERA PERSON section) appears in EVERY
+  scene, holding / using / showing the product to camera.
 - Every visual_description MUST show the creator AND the product together — describe the person's
-  action with the product (e.g. "young woman holding the tan tote bag up to camera, smiling, casual
-  sunlit room"), the framing, and the vibe. Keep it natural and selfie/handheld in feel.
+  action with the product (e.g. "the creator holding the tan tote bag up to camera, smiling, casual
+  sunlit room"), the framing, and the vibe. Keep it natural and selfie/handheld in feel. Do NOT
+  assume a gender — use the ON-CAMERA PERSON description above.
 - Mark product close-up / showcase beats "feature_product": true; talking-head beats "feature_product": false.
 - Keep visual_description in English (Veo3 rule above).
 """) if _is_ugc else ""
@@ -691,6 +707,7 @@ ENTIRELY through objects and scenery, with zero human presence in the generated 
         + (_no_characters_section if _no_characters else "")
         + (_product_section if _is_product else "")
         + (_ugc_section if _is_ugc else "")
+        + _character_section
         + "\nRespond ONLY with valid JSON — no markdown fences."
     )
 

@@ -148,31 +148,62 @@ def _parse_script_to_storyboard(script: str) -> dict:
     }
 
 
-def _describe_product(image_path: str) -> str:
-    """One Claude vision call → a short factual description of the product in the image,
-    used to make the storyboard product-aware (Product mode)."""
+def _vision_describe(image_path: str, instruction: str) -> str:
+    """One Claude-vision call over an image, returning a short description. Downscales
+    large images first so we never hit Claude's 10 MB image cap."""
     import base64
+    import io
     import anthropic
 
     api_key = os.getenv("ANTHROPIC_API_KEY", "") or settings_manager.get("anthropic_api_key", "")
-    if not api_key:
+    if not api_key or not Path(image_path).exists():
         return ""
+    raw = Path(image_path).read_bytes()
     suffix = Path(image_path).suffix.lower().lstrip(".")
     media_type = {"jpg": "image/jpeg", "jpeg": "image/jpeg", "png": "image/png", "webp": "image/webp"}.get(suffix, "image/jpeg")
-    data = base64.standard_b64encode(Path(image_path).read_bytes()).decode()
+    try:
+        from PIL import Image
+        img = Image.open(io.BytesIO(raw))
+        if max(img.size) > 1568 or len(raw) > 4_500_000 or media_type not in ("image/jpeg", "image/png"):
+            img = img.convert("RGB")
+            if max(img.size) > 1568:
+                s = 1568 / max(img.size)
+                img = img.resize((max(1, int(img.size[0] * s)), max(1, int(img.size[1] * s))))
+            buf = io.BytesIO()
+            img.save(buf, format="JPEG", quality=85)
+            raw, media_type = buf.getvalue(), "image/jpeg"
+    except Exception:
+        pass
+    data = base64.standard_b64encode(raw).decode()
     resp = anthropic.Anthropic(api_key=api_key).messages.create(
         model="claude-sonnet-4-6",
-        max_tokens=200,
+        max_tokens=220,
         messages=[{"role": "user", "content": [
             {"type": "image", "source": {"type": "base64", "media_type": media_type, "data": data}},
-            {"type": "text", "text": (
-                "Describe this product in 1-2 sentences for a video scriptwriter. "
-                "State exactly what it is, its key visual features (color, material, shape, style), "
-                "and the vibe it conveys. Be concrete and factual. Return only the description."
-            )},
+            {"type": "text", "text": instruction},
         ]}],
     )
     return resp.content[0].text.strip()
+
+
+def _describe_product(image_path: str) -> str:
+    """Short factual product description → makes the storyboard product-aware."""
+    return _vision_describe(image_path, (
+        "Describe this product in 1-2 sentences for a video scriptwriter. "
+        "State exactly what it is, its key visual features (color, material, shape, style), "
+        "and the vibe it conveys. Be concrete and factual. Return only the description."
+    ))
+
+
+def _describe_person(image_path: str) -> str:
+    """Short factual description of the on-camera creator → so the script matches the
+    actual person (gender/age/look) instead of Claude inventing one."""
+    return _vision_describe(image_path, (
+        "Describe the PERSON in this image in 1-2 sentences for a video scriptwriter: "
+        "their apparent gender, approximate age range, and key visible features (hair, "
+        "skin tone, build, notable clothing/style). Be factual and neutral — this is the "
+        "on-camera creator the script must depict. Return only the description."
+    ))
 
 
 def run_ai_pipeline(job: Job, params: dict[str, Any]) -> None:
@@ -245,6 +276,17 @@ def run_ai_pipeline(job: Job, params: dict[str, Any]) -> None:
                 job.update(message="Product analyzed from image")
             except Exception as _exc:
                 job.update(message=f"Product image analysis skipped ({_exc})")
+
+        # ── Character / UGC mode: read the CREATOR from their image (vision) ────
+        # so the script depicts the real person (gender/age/look) instead of Claude
+        # inventing one that contradicts the reference (e.g. a man ref → "woman" script).
+        _char_img = params.get("character_image_path")
+        if params.get("reel_type") in ("character", "ugc") and _char_img and Path(_char_img).exists():
+            try:
+                reel_brief["character_description"] = _describe_person(_char_img)
+                job.update(message="Creator analyzed from image")
+            except Exception as _exc:
+                job.update(message=f"Creator image analysis skipped ({_exc})")
 
         job.end_stage("brief", "Brief ready")
 
@@ -561,12 +603,12 @@ def run_ai_pipeline(job: Job, params: dict[str, Any]) -> None:
                 "score": None,
             }, None
 
-        # Build render units. When voiceover drives the edit (all AI reel types), each
-        # scene is cut on its narration's NATURAL PAUSES — same pause-driven logic as
-        # Cinematic: detect the pauses in the scene's VO, tile it into beats, and a beat
-        # longer than one clip fans into several (multi-clip). The visual tiles the full
-        # VO so nothing is cut and every visual change lands on a speech pause.
-        from tools.audio.pause_detector import plan_beat_clips, detect_beats, beats_to_segments
+        # Build render units. When voiceover drives the edit, each scene is ONE clip —
+        # and only fans into extra clips when its narration is longer than a single model
+        # clip (~8s), so the visual covers the whole VO with the fewest clips (lowest cost,
+        # least drift). No cutting on internal pauses here (that's Cinematic's job, where
+        # clips are cheap keyframe stills). The full voiceover still plays uncut.
+        from tools.audio.pause_detector import plan_beat_clips
 
         def _pad_for(scene: dict) -> float:
             if reel_type == "character":
@@ -581,20 +623,13 @@ def run_ai_pipeline(job: Job, params: dict[str, Any]) -> None:
         _uorder = 0
         for si, scene in enumerate(scenes):
             pad = _pad_for(scene)
-            sn = scene["scene"]
-            vo = scene_vo_durations.get(sn, 0.0) if multiclip_vo else 0.0
-            vo_path = scene_vo_files.get(sn) if multiclip_vo else None
-            if multiclip_vo and vo > 0 and vo_path:
+            vo = scene_vo_durations.get(scene["scene"], 0.0) if multiclip_vo else 0.0
+            if multiclip_vo and vo > 0:
                 usable = max(2.0, _clip_secs - pad)
-                _det = detect_beats(vo_path)
-                _segs = beats_to_segments(_det["beats"], _det["total_duration"] or vo)
-                _sub = 0
-                for seg in _segs:
-                    for c in plan_beat_clips([seg], max_clip_seconds=usable):
-                        render_units.append({"order": _uorder, "scene_index": si, "scene": scene,
-                                             "sub": _sub, "target_dur": c["target_duration"], "pad": pad})
-                        _uorder += 1
-                        _sub += 1
+                for c in plan_beat_clips([{"start": 0, "end": vo, "duration": vo}], max_clip_seconds=usable):
+                    render_units.append({"order": _uorder, "scene_index": si, "scene": scene,
+                                         "sub": c["sub_index"], "target_dur": c["target_duration"], "pad": pad})
+                    _uorder += 1
             elif multiclip_vo:
                 usable = max(2.0, _clip_secs - pad)
                 render_units.append({"order": _uorder, "scene_index": si, "scene": scene, "sub": 0,
@@ -828,6 +863,9 @@ def run_ai_pipeline(job: Job, params: dict[str, Any]) -> None:
             "voiceover_path": voiceover_path,
             "music_path": music_path,
             "duck_original": True,
+            # Voiceover on → drop the AI clip's own audio so Veo/Kling speech can't
+            # clash with the ElevenLabs narration.
+            "drop_original": vo_on,
         })
         if not mix_result.success:
             raise RuntimeError(f"Audio mix failed: {mix_result.error}")
@@ -1455,7 +1493,7 @@ def _run_cinematic_finish(job: Job, params: dict, project_dir: Path, project_id:
     mr = AudioMixer().execute({
         "video_path": titled_path, "output_path": final_path,
         "voiceover_path": voiceover_path, "music_path": _resolve_music(params.get("music_file")),
-        "duck_original": True,
+        "duck_original": True, "drop_original": bool(voiceover_path),
     })
     if not mr.success:
         raise RuntimeError(f"Audio mix failed: {mr.error}")
@@ -1834,7 +1872,7 @@ def _run_cinematic_finish_planned(job: Job, params: dict, project_dir: Path, pro
     mr = AudioMixer().execute({
         "video_path": titled_path, "output_path": final_path,
         "voiceover_path": vo_concat_path, "music_path": _resolve_music(params.get("music_file")),
-        "duck_original": True,
+        "duck_original": True, "drop_original": bool(vo_concat_path),
     })
     if not mr.success:
         raise RuntimeError(f"Audio mix failed: {mr.error}")

@@ -48,6 +48,9 @@ class AudioMixer(BaseTool):
         voiceover_path = params.get("voiceover_path")
         music_path = params.get("music_path")
         duck_original = params.get("duck_original", True)
+        # When a voiceover replaces the clip's own audio, drop the clip audio entirely
+        # (not just duck it) so AI-generated speech never conflicts with the voiceover.
+        drop_original = params.get("drop_original", False)
         orig_vol = params.get("original_volume", 0.05 if duck_original else 1.0)
         music_vol = params.get("music_volume", 0.25)
         vo_vol = params.get("voiceover_volume", 1.0)
@@ -57,7 +60,7 @@ class AudioMixer(BaseTool):
         # Get video duration
         dur = self._get_duration(video_path)
 
-        has_video_audio = self._has_audio(video_path)
+        has_video_audio = self._has_audio(video_path) and not drop_original
 
         inputs = ["-i", video_path]
         filter_parts = []
