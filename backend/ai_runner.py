@@ -363,6 +363,12 @@ def run_ai_pipeline(job: Job, params: dict[str, Any]) -> None:
             approval_payload["cinematic"] = True
             approval_payload["style_lock"] = storyboard.get("style_lock", "")
             approval_payload["shots"] = storyboard.get("shots", [])
+        # Cost estimate so you approve the spend before any generation.
+        _use_kf = (not is_cinematic) and (not params.get("skip_storyboard")) and _keyframe_provider_ready()
+        approval_payload["cost_estimate"] = _preview_ai_cost(
+            params.get("reel_type", "story"), scenes, is_cinematic, _use_kf,
+            params.get("include_voiceover", True),
+        )
         job.request_approval(approval_payload)
         approved = job.wait_for_approval(timeout=1800)
         if not approved:
@@ -1493,6 +1499,22 @@ def _estimate_cinematic_cost(provider: str, n_stills: int, n_sheet: int, n_end: 
         "rows": out,
         "total": round(sum(r["subtotal"] for r in out), 2),
     }
+
+
+def _preview_ai_cost(reel_type: str, scenes: list[dict], is_cinematic: bool,
+                     use_keyframes: bool, include_vo: bool) -> dict:
+    """Pre-generation cost estimate shown at the script-approval gate so you approve the
+    spend before anything is generated. Counts are estimated from the scene plan."""
+    provider = (settings_manager.get("ai_video_provider", "veo3") or "veo3").lower()
+    n = len(scenes)
+    n_stills = n if (is_cinematic or use_keyframes) else 0
+    n_sheet = 1 if is_cinematic else 0
+    n_cont = n_stills if (is_cinematic or reel_type in ("character", "ugc")) else 0
+    n_vo = sum(1 for s in scenes if (s.get("voiceover") or "").strip()) if include_vo else 0
+    est = _estimate_cinematic_cost(provider, n_stills, n_sheet, 0, n_cont, n, n_vo)
+    est["preview"] = True
+    est["note"] = "Approximate estimate BEFORE generation — long-narration scenes may add a few clips. " + est["note"]
+    return est
 
 
 def _capture_cinematic_inputs(storyboard: dict, provider: str, kf_endpoint: str, clip_model: str) -> dict:

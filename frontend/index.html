@@ -2018,6 +2018,8 @@
       </div>
     </div>
 
+    <div id="approval-cost-banner" style="display:none;padding:11px 16px;border-top:1px solid var(--border);background:#141124"></div>
+
     <div class="modal-actions">
       <button class="btn-modal-cancel" onclick="cancelApproval()">Cancel</button>
       <button class="btn-modal-approve" onclick="submitApproval()">Approve &amp; Render ▶</button>
@@ -2598,6 +2600,25 @@
       contBtn.style.display = 'none';
       document.getElementById('approval-continuity-list').innerHTML = '';
       if (approveBtn) approveBtn.textContent = 'Approve & Render ▶';
+    }
+
+    // Cost estimate — you approve the spend before anything is generated.
+    const costBanner = document.getElementById('approval-cost-banner');
+    const ce = data.cost_estimate;
+    if (costBanner && ce) {
+      const rows = (ce.rows || []).filter(r => r.units > 0)
+        .map(r => `${esc(r.stage)}: $${r.subtotal.toFixed(2)}`).join('  ·  ');
+      costBanner.style.display = '';
+      costBanner.innerHTML = `
+        <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap">
+          <div><span style="font-size:11px;text-transform:uppercase;letter-spacing:.5px;color:var(--purple-text);font-weight:700">Estimated cost</span>
+          <span style="font-size:18px;font-weight:800;color:var(--text);margin-left:8px">~$${(ce.total || 0).toFixed(2)}</span></div>
+          <div style="font-size:11px;color:var(--text4)">Approving also approves this spend</div>
+        </div>
+        <div style="font-size:11px;color:var(--text3);margin-top:6px;line-height:1.5">${rows}</div>
+        <div style="font-size:10px;color:var(--text4);margin-top:4px">${esc(ce.note || '')}</div>`;
+    } else if (costBanner) {
+      costBanner.style.display = 'none';
     }
 
     // Open straight to the continuity tab when there are stills to review.
