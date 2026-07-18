@@ -561,8 +561,10 @@ def run_ai_pipeline(job: Job, params: dict[str, Any]) -> None:
             if dialogue:
                 prompt = f'{prompt}. Character says: "{dialogue}"'
 
-            _dur_src = unit.get("target_dur") or scene.get("duration_seconds", 5)
-            duration = min(int(round(_dur_src)) or 5, VEO3_MAX_DURATION)
+            # Smart clip length: generate only as long as this scene needs (snapped to
+            # the provider's valid lengths), so a short scene isn't billed as a full clip.
+            _dur_src = float(unit.get("target_dur") or scene.get("duration_seconds", 5))
+            duration = _snap_clip_duration(ai_provider, _dur_src)
             dest_path = str(clips_dir / f"clip_{order:03d}_veo3.mp4")
 
             image_path = None
@@ -1350,7 +1352,7 @@ def _generate_video_clip(provider: str, *, prompt: str, dest_path: str,
         "operation": "text_to_video", "prompt": prompt, "dest_path": dest_path,
         "vertex_project_id": vertex_project_id, "vertex_location": vertex_location,
         "image_path": image_path, "reference_image_paths": reference_image_paths,
-        "model": veo_model, "negative_prompt": negative_prompt,
+        "model": veo_model, "negative_prompt": negative_prompt, "duration": duration,
     })
 
 
@@ -1745,10 +1747,23 @@ def _run_cinematic_finish(job: Job, params: dict, project_dir: Path, project_id:
 # ══════════════════════════════════════════════════════════════════════════════
 
 def _provider_clip_seconds(provider: str) -> int:
-    """How long each generated clip is for this provider — used both to cap beat
-    splitting and as the generation duration, so a clip is never shorter than the
-    segment it must cover (which would desync the VO)."""
+    """Max clip length for this provider — used to cap how long a scene's single clip
+    can be before it must split into two."""
     return 8 if provider == "veo3" else 5
+
+
+# The discrete clip lengths each provider can generate (seconds). We pick the smallest
+# valid length that covers the scene, so a 3s scene isn't billed as an 8s clip.
+_PROVIDER_DURATIONS = {"veo3": (4, 6, 8), "fal": (5, 10), "wavespeed": (5,)}
+
+
+def _snap_clip_duration(provider: str, target: float) -> int:
+    """Smallest valid generation length for `provider` that is ≥ target seconds."""
+    opts = _PROVIDER_DURATIONS.get(provider, (8,))
+    for o in opts:
+        if o >= target - 0.05:
+            return o
+    return opts[-1]
 
 
 def _concat_vo_files(paths: list[str], dest_path: str) -> str | None:
@@ -1906,9 +1921,11 @@ def _run_cinematic_clips_planned(job: Job, params: dict, project_dir: Path,
         still = str(keyframes_dir / f"{u['still_id']}.png")
         video_prompt = f"{shot.get('video_prompt', '').strip()}. STYLE: {style_lock}".strip()
         dest = str(clips_dir / f"clip_{u['order']:03d}_{u['still_id']}.mp4")
+        # Smart clip length: only as long as this beat needs.
+        _dur = _snap_clip_duration(provider, float(u.get("target_duration") or clip_secs))
         res = _generate_video_clip(
             provider, prompt=video_prompt, dest_path=dest, image_path=still,
-            negative_prompt=_CINEMATIC_NO_SPEECH, duration=clip_secs,
+            negative_prompt=_CINEMATIC_NO_SPEECH, duration=_dur,
             vertex_project_id=vx_project, vertex_location=vx_location,
             veo_model=veo_model, fal_endpoint=fal_endpoint, ws_model=ws_model,
         )

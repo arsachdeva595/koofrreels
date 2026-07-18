@@ -135,6 +135,7 @@ class Veo3Client(BaseTool):
         negative_prompt: str = "",
         reference_image_paths: list[str] | None = None,
         model: str = VEO3_MODEL,
+        duration_seconds: int | None = None,
     ) -> tuple[str | None, str | None]:
         """POST to Veo3 predictLongRunning. Returns (operation_name, error)."""
         url = _ENDPOINT_TMPL.format(location=location, project=project_id, model=model, verb="predictLongRunning")
@@ -157,6 +158,9 @@ class Veo3Client(BaseTool):
         parameters: dict = {"sampleCount": 1}
         if negative_prompt:
             parameters["negativePrompt"] = negative_prompt
+        if duration_seconds:
+            # Veo 3.1 accepts only 4, 6 or 8 seconds — snap to the smallest valid ≥ ask.
+            parameters["durationSeconds"] = next((d for d in (4, 6, 8) if d >= duration_seconds - 0.05), 8)
         payload = {
             "instances": [instance],
             "parameters": parameters,
@@ -254,6 +258,7 @@ class Veo3Client(BaseTool):
         image_path = params.get("image_path")
         negative_prompt = params.get("negative_prompt", "")
         reference_image_paths = params.get("reference_image_paths") or None
+        duration_seconds = params.get("duration") or params.get("duration_seconds")
         # Reference images require the reference-capable model; otherwise use the default.
         model = params.get("model") or (VEO3_REFERENCE_MODEL if reference_image_paths else VEO3_MODEL)
 
@@ -272,6 +277,7 @@ class Veo3Client(BaseTool):
         op_name, err = self._submit_generation(
             project_id, location, prompt, token, image_path, negative_prompt,
             reference_image_paths=reference_image_paths, model=model,
+            duration_seconds=duration_seconds,
         )
         if err:
             return ToolResult(success=False, error=err)
