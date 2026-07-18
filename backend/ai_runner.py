@@ -751,33 +751,40 @@ def run_ai_pipeline(job: Job, params: dict[str, Any]) -> None:
             }
             job.end_stage("edit_decisions", f"{len(cuts)} clips · {edit_decisions['total_duration_seconds']:.1f}s · edit planner skipped")
         elif multiclip_vo:
-            # Voiceover drives the edit: one hard cut per unit, each trimmed to its
-            # chunk (after the char/product pad). A scene's units sum to its full VO
-            # length, so build_positioned_voiceover (grouped by scene) plays the whole
-            # narration with nothing chopped.
+            # Voiceover drives the edit, with a soft ~0.3s DISSOLVE between scenes.
+            # Each scene's clips sum to its full VO length; non-last clips are extended
+            # into their spare frames (clips are generated a touch longer than needed)
+            # so the crossfade overlaps that extra footage — not the voiceover — keeping
+            # the whole narration in sync and uncut.
+            _DISSOLVE = 0.3
+            ordered = sorted(clip_manifest["clips"], key=lambda c: c.get("order", 0))
             cuts = []
-            for clip in sorted(clip_manifest["clips"], key=lambda c: c.get("order", 0)):
+            for idx, clip in enumerate(ordered):
                 pad = clip.get("pad", 0.0)
                 clip_len = clip["duration_seconds"]
                 target = clip.get("target_dur")
+                base = target if target is not None else clip_len
                 trim_in = pad if pad < clip_len - 0.3 else 0.0
-                trim_out = round(min(trim_in + (target if target is not None else clip_len), clip_len), 3)
+                is_last = idx == len(ordered) - 1
+                extra = 0.0 if is_last else _DISSOLVE
+                trim_out = round(min(trim_in + base + extra, clip_len), 3)
                 if trim_out <= trim_in:
                     trim_out = round(min(trim_in + 2.0, clip_len), 3)
                 cuts.append({
                     "order": clip["order"], "clip_id": clip["clip_id"],
                     "trim_in": trim_in, "trim_out": trim_out,
-                    "transition": "hard_cut", "transition_duration_seconds": 0.0,
+                    "transition": "hard_cut" if is_last else "dissolve",
+                    "transition_duration_seconds": 0.0 if is_last else _DISSOLVE,
                     "scene": clip.get("scene"),
                 })
-            total = sum(c["trim_out"] - c["trim_in"] for c in cuts)
+            total = sum(c["trim_out"] - c["trim_in"] for c in cuts) - _DISSOLVE * max(0, len(cuts) - 1)
             edit_decisions = {
                 "version": "1.1", "cuts": cuts,
                 "total_duration_seconds": round(max(total, 1.0), 2),
                 "music_start_offset_seconds": 0.0, "abt_timing": {},
             }
             job.end_stage("edit_decisions",
-                          f"{len(cuts)} clips · {edit_decisions['total_duration_seconds']:.1f}s · VO-timed (full voiceover)")
+                          f"{len(cuts)} clips · {edit_decisions['total_duration_seconds']:.1f}s · VO-timed, soft dissolves")
         else:
             edit_decisions = edit_planner.plan_edit(
                 clip_manifest, scenes, target_dur,
@@ -872,7 +879,10 @@ def run_ai_pipeline(job: Job, params: dict[str, Any]) -> None:
         voiceover_path = None
         if scene_vo_files:
             job.update(progress_pct=83, message="Syncing voiceover to scene timestamps...")
-            video_duration = sum(c["duration_seconds"] for c in normalized_clips)
+            # Crossfades overlap adjacent clips, shortening the timeline by each
+            # boundary's transition_duration — subtract those so the VO lines up.
+            video_duration = (sum(c["duration_seconds"] for c in normalized_clips)
+                              - sum(c["transition_duration"] for c in normalized_clips[:-1]))
             voiceover_path = edit_planner.build_positioned_voiceover(
                 scene_vo_files=scene_vo_files,
                 normalized_clips=normalized_clips,
@@ -1976,19 +1986,22 @@ def _run_cinematic_clips_planned(job: Job, params: dict, project_dir: Path,
 
 
 def _cinematic_text_timing(normalized_clips: list[dict], cuts: list[dict], scenes: list[dict]) -> list[dict]:
-    """Overlay each shot's text once, spanning that shot's beats (not per clip)."""
+    """Overlay each shot's text once, spanning that shot's beats (not per clip).
+    Advances time by (clip - transition overlap) so crossfades don't drift the text."""
     scene_over = {s["scene"]: (s.get("overlay_text") or "").strip() for s in scenes}
     first_start: dict[int, float] = {}
     span: dict[int, float] = {}
     t = 0.0
+    n = len(normalized_clips)
     for i, cut in enumerate(cuts):
         sn = cut.get("scene")
         d = normalized_clips[i]["duration_seconds"]
+        td = normalized_clips[i].get("transition_duration", 0.0) if i < n - 1 else 0.0
         if sn not in first_start:
             first_start[sn] = t
             span[sn] = 0.0
-        span[sn] += d
-        t += d
+        span[sn] += d - td
+        t += d - td
     out = []
     for sn, start in first_start.items():
         txt = scene_over.get(sn, "")
@@ -2039,7 +2052,8 @@ def _run_cinematic_finish_planned(job: Job, params: dict, project_dir: Path, pro
             raise RuntimeError(f"Normalize failed for {clip['filename']}: {nr.error}")
         normalized_clips.append({
             "path": norm_path, "duration_seconds": cut["trim_out"] - cut["trim_in"],
-            "transition": "hard_cut", "transition_duration": 0.0,
+            "transition": cut.get("transition", "hard_cut"),
+            "transition_duration": cut.get("transition_duration_seconds", 0.0),
         })
 
     job.update(progress_pct=86, message="Colour-matching shots...")

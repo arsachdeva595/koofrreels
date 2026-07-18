@@ -67,23 +67,25 @@ def build_render_plan(
     return plan
 
 
-def build_edit_decisions(render_plan: list[dict], clip_manifest: dict) -> dict:
+def build_edit_decisions(render_plan: list[dict], clip_manifest: dict, dissolve: float = 0.3) -> dict:
     """Turn the render plan + generated clips into edit_decisions the composer uses.
 
-    One cut per render unit, in order, HARD CUT (cut on the pause), trimmed to the
-    unit's target_duration (capped at the clip's real length). No crossfade overlap,
-    so total visual length == sum of targets == the VO length, and the full VO lays
-    over the timeline with no positioning or truncation.
+    One cut per render unit, in order, with a soft DISSOLVE between shots. Each non-last
+    clip is extended by `dissolve` seconds into its spare footage (clips are generated a
+    touch longer than needed), so the crossfade overlaps that extra — not the voiceover.
+    The net visible length per shot stays == its target, so the full narration lays over
+    the timeline in sync.
     """
     by_still = {c.get("still_id") or c.get("clip_id"): c for c in clip_manifest.get("clips", [])}
+    usable = [u for u in render_plan if by_still.get(u["still_id"])]
     cuts: list[dict] = []
     order = 0
-    for unit in render_plan:
-        clip = by_still.get(unit["still_id"])
-        if not clip:
-            continue
+    for idx, unit in enumerate(usable):
+        clip = by_still[unit["still_id"]]
         clip_len = float(clip.get("duration_seconds", unit["target_duration"]))
-        trim_out = round(min(float(unit["target_duration"]), clip_len), 3)
+        is_last = idx == len(usable) - 1
+        extra = 0.0 if is_last else dissolve
+        trim_out = round(min(float(unit["target_duration"]) + extra, clip_len), 3)
         if trim_out <= 0:
             continue
         cuts.append({
@@ -92,12 +94,13 @@ def build_edit_decisions(render_plan: list[dict], clip_manifest: dict) -> dict:
             "still_id": unit["still_id"],
             "trim_in": 0.0,
             "trim_out": trim_out,
-            "transition": "hard_cut",
-            "transition_duration_seconds": 0.0,
+            "transition": "hard_cut" if is_last else "dissolve",
+            "transition_duration_seconds": 0.0 if is_last else dissolve,
             "scene": unit.get("scene"),
         })
         order += 1
-    total = round(sum(c["trim_out"] - c["trim_in"] for c in cuts), 3)
+    total = round(sum(c["trim_out"] - c["trim_in"] for c in cuts)
+                  - dissolve * max(0, len(cuts) - 1), 3)
     return {
         "version": "1.0",
         "cuts": cuts,
