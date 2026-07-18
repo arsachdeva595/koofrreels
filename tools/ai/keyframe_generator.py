@@ -186,7 +186,7 @@ class KeyframeGenerator:
             for i, shot in enumerate(shots):
                 kf_id = shot.get("kf_id", f"KF{i + 1}")
                 dest = str(kf_dir / f"{kf_id}.png")
-                refs = self._shot_refs(self._refs_for("chain", reference_path, None, prev_path), shot)
+                refs = _shot_refs(self._refs_for("chain", reference_path, None, prev_path), shot)
                 res = self.generate_one(shot, style_lock, refs, dest)
                 entries[i] = _entry(i, shot, res)
                 if res.success:
@@ -200,7 +200,7 @@ class KeyframeGenerator:
                 i, shot = i_shot
                 kf_id = shot.get("kf_id", f"KF{i + 1}")
                 dest = str(kf_dir / f"{kf_id}.png")
-                refs = self._shot_refs(self._refs_for(strategy, reference_path, char_sheet_path, None), shot)
+                refs = _shot_refs(self._refs_for(strategy, reference_path, char_sheet_path, None), shot)
                 return i, shot, self.generate_one(shot, style_lock, refs, dest)
 
             with ThreadPoolExecutor(max_workers=4) as pool:
