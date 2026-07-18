@@ -1341,6 +1341,25 @@
         <img id="ai-cine-preview" style="display:none;max-height:120px;border-radius:6px;margin-top:8px" />
       </div>
       <input type="file" id="ai-cine-input" accept="image/*" style="display:none" onchange="handleAICineUpload(this)" />
+
+      <div class="toggle-row" style="margin-top:12px">
+        <span class="toggle-label" style="display:flex;flex-direction:column;gap:2px">
+          Include a product
+          <span style="font-size:11px;color:#666;font-weight:400">The director weaves the product into the storyline and shows it in the key shots.</span>
+        </span>
+        <label class="switch">
+          <input type="checkbox" id="ai-cine-include-product" onchange="document.getElementById('ai-cine-product-wrap').style.display=this.checked?'':'none'" />
+          <span class="slider"></span>
+        </label>
+      </div>
+      <div id="ai-cine-product-wrap" style="display:none;margin-top:10px">
+        <div class="section-label" style="margin-bottom:8px">🛍️ Product Image</div>
+        <div id="ai-cine-prod-drop" style="border:2px dashed #444;border-radius:8px;padding:16px;text-align:center;cursor:pointer;min-height:80px;display:flex;align-items:center;justify-content:center;flex-direction:column" onclick="document.getElementById('ai-cine-prod-input').click()">
+          <span id="ai-cine-prod-drop-label" style="color:#888;font-size:13px">Click to upload product image</span>
+          <img id="ai-cine-prod-preview" style="display:none;max-height:110px;border-radius:6px;margin-top:8px" />
+        </div>
+        <input type="file" id="ai-cine-prod-input" accept="image/*" style="display:none" onchange="handleAICineProductUpload(this)" />
+      </div>
     </div>
 
     <hr class="divider" />
@@ -3261,6 +3280,22 @@
     } catch(e) { showModuleError('ai', e.message); }
   }
 
+  async function handleAICineProductUpload(input) {
+    const file = input.files[0];
+    if (!file) return;
+    try {
+      const fd = new FormData(); fd.append('file', file);
+      const r = await fetch(`${API}/api/ai/upload-image`, {method: 'POST', body: fd});
+      if (!r.ok) throw new Error('Upload failed');
+      const {path} = await r.json();
+      aiProductImagePath = path;
+      const preview = document.getElementById('ai-cine-prod-preview');
+      preview.src = URL.createObjectURL(file);
+      preview.style.display = '';
+      document.getElementById('ai-cine-prod-drop-label').style.display = 'none';
+    } catch(e) { showModuleError('ai', e.message); }
+  }
+
   async function handleAIProductUpload(input) {
     const file = input.files[0];
     if (!file) return;
@@ -3357,7 +3392,8 @@
       reel_type: aiReelType,
       framework: document.getElementById('ai-framework').value,
       character_image_path: (aiReelType === 'character' || aiReelType === 'ugc' || aiReelType === 'cinematic') ? aiCharImagePath : null,
-      product_image_path: (aiReelType === 'product' || aiReelType === 'ugc') ? aiProductImagePath : null,
+      product_image_path: (aiReelType === 'product' || aiReelType === 'ugc'
+        || (aiReelType === 'cinematic' && document.getElementById('ai-cine-include-product').checked)) ? aiProductImagePath : null,
       keyframe_paths: aiReelType === 'story' && aiKeyframePaths.length ? aiKeyframePaths : null,
       skip_storyboard: document.getElementById('ai-skip-storyboard').checked,
       skip_edit_planner: document.getElementById('ai-skip-edit-planner').checked,

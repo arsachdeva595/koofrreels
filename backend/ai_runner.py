@@ -266,11 +266,12 @@ def run_ai_pipeline(job: Job, params: dict[str, Any]) -> None:
                     "Cinematic mode needs one character reference image — upload it in AI Reels → Cinematic."
                 )
 
-        # ── Product / UGC mode: read the product from its image (vision) ───────
+        # ── Product / UGC / Cinematic(optional) mode: read the product (vision) ─
         # The description is fed into the storyboard prompt so the script is built
-        # around the actual product, not just the text prompt.
+        # around the actual product, not just the text prompt. Cinematic includes a
+        # product only when the user ticked "Include a product" (image is present).
         product_image_path = params.get("product_image_path")
-        if params.get("reel_type") in ("product", "ugc") and product_image_path and Path(product_image_path).exists():
+        if params.get("reel_type") in ("product", "ugc", "cinematic") and product_image_path and Path(product_image_path).exists():
             try:
                 reel_brief["product_description"] = _describe_product(product_image_path)
                 job.update(message="Product analyzed from image")
@@ -1053,6 +1054,7 @@ def _run_cinematic_keyframes(job: Job, params: dict, project_dir: Path, project_
     gen = KeyframeGenerator().generate_sequence(
         shots, style_lock, reference_path, str(keyframes_dir),
         strategy=strategy, progress_cb=_kf_progress,
+        product_image_path=params.get("product_image_path"),
     )
     entries = gen["entries"]
     char_sheet = gen["character_sheet"]
@@ -1103,6 +1105,7 @@ def _run_cinematic_keyframes(job: Job, params: dict, project_dir: Path, project_
         "style_lock": style_lock,
         "strategy": strategy,
         "shots": shots,
+        "product_image_path": params.get("product_image_path"),
     }
 
     # ── CONTINUITY QA GATE (second approval) ───────────────────────────────────
@@ -1873,6 +1876,8 @@ def _run_cinematic_continuation_stills(job: Job, project_dir: Path, storyboard: 
 
     kg = KeyframeGenerator()
     refs = kg._refs_for(strategy, reference_path, char_sheet, None)
+    _prod = ctx.get("product_image_path")
+    _prod = _prod if (_prod and Path(_prod).exists()) else None
     job.begin_stage("continuation_stills", "Continuation Stills",
                     f"{len(cont)} extra stills for long / multi-beat shots...")
     job.update(progress_pct=28)
@@ -1880,7 +1885,8 @@ def _run_cinematic_continuation_stills(job: Job, project_dir: Path, storyboard: 
     def _gen(u):
         shot = shots[u["shot_index"]]
         dest = str(keyframes_dir / f"{u['still_id']}.png")
-        return u, kg.generate_one(shot, style_lock, refs, dest)
+        shot_refs = refs + [_prod] if (_prod and shot.get("feature_product")) else refs
+        return u, kg.generate_one(shot, style_lock, shot_refs, dest)
 
     done = 0
     with ThreadPoolExecutor(max_workers=4) as pool:

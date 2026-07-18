@@ -884,6 +884,16 @@ def _generate_cinematic_storyboard(reel_brief: dict) -> dict:
     if not api_key:
         return _default_cinematic_storyboard(reel_brief, n_shots)
 
+    _product_desc = reel_brief.get("product_description", "")
+    product_rule = (
+        f"\nPRODUCT — WEAVE THIS PRODUCT INTO THE STORY:\n"
+        f"  {_product_desc}\n"
+        "- Build the sequence so the product appears naturally as part of the narrative (the payoff and\n"
+        "  1–2 hero shots where the character holds / uses / presents it). Not every shot needs it.\n"
+        "- For shots that show the product, set \"feature_product\": true and describe the product in that\n"
+        "  shot's image_prompt/video_prompt. For all other shots set \"feature_product\": false.\n"
+    ) if _product_desc else ""
+
     # Same Veo3/Nano content policy that governs the AI-Reels storyboard: English-only
     # visual prompts, never minor/age terms, avoid violence/self-harm/sexual triggers.
     policy = """
@@ -912,6 +922,7 @@ CONTENT POLICY (image_prompt and video_prompt are sent to image/video models):
         "- overlay_text: short punchy ON-SCREEN caption for this beat (≤6 words, front-load tension).\n"
         "  Carry the narrative like a captioned reel. Use \"\" for pure-visual beats — NOT every shot\n"
         "  needs text (aim for ~half). overlay_text may be Hinglish (brand voice); keep it tight.\n"
+        + product_rule
         + policy +
         "\nRespond ONLY with valid JSON — no markdown fences.\n"
         "Shape: {\"style_lock\": \"...\", \"aspect_ratio\": \"9:16\", \"shots\": [{"
@@ -923,12 +934,15 @@ CONTENT POLICY (image_prompt and video_prompt are sent to image/video models):
         "\"vo_text\": \"spoken line for this beat (may be empty)\", "
         "\"overlay_text\": \"short on-screen caption ≤6 words, or empty\", "
         "\"speaking_on_camera\": false, \"transition_out\": \"cut\", "
-        "\"needs_end_frame\": false, \"end_image_prompt\": null}]}"
+        "\"needs_end_frame\": false, \"end_image_prompt\": null"
+        + (", \"feature_product\": false" if _product_desc else "")
+        + "}]}"
     )
 
     user = (
         f"Storyline: {prompt}{context}\n"
-        f"Target duration: {target_dur}s across {n_shots} shots (~{dur_per}s each).\n"
+        + (f"Product to feature: {_product_desc}\n" if _product_desc else "")
+        + f"Target duration: {target_dur}s across {n_shots} shots (~{dur_per}s each).\n"
         "Write the cinematic shot contract now."
     )
 

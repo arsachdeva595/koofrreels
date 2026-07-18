@@ -101,7 +101,10 @@ class KeyframeGenerator:
             f"Place that exact person in a NEW shot — {self._framing(shot)}: {shot.get('image_prompt', '').strip()} "
             "Vertical 9:16 cinematic film still, photorealistic. Only the pose, camera framing, "
             "lighting and background change from shot to shot; the person and their wardrobe stay identical. "
-            f"Overall look (affects grain/colour/lighting ONLY): {style_lock}. "
+            + ("Also include the PRODUCT shown in the product reference image — match its exact shape, "
+               "colour and details; the person is holding / using / presenting it naturally. "
+               if shot.get("feature_product") else "")
+            + f"Overall look (affects grain/colour/lighting ONLY): {style_lock}. "
             "IMPORTANT: render NO text, words, letters, captions, watermarks, brand names or logos "
             "anywhere in the image — film-stock names like 'Kodak' describe the look, they must never "
             "appear as visible text."
@@ -140,10 +143,19 @@ class KeyframeGenerator:
         keyframes_dir: str,
         strategy: str = "sheet",
         progress_cb: Callable[[int, int, str, bool], None] | None = None,
+        product_image_path: str | None = None,
     ) -> dict:
-        """Generate one still per shot. Returns {character_sheet, entries}."""
+        """Generate one still per shot. Returns {character_sheet, entries}.
+        On shots flagged feature_product, the product image is added as an extra
+        reference so the still shows the character with the product."""
         kf_dir = Path(keyframes_dir)
         kf_dir.mkdir(parents=True, exist_ok=True)
+        _prod = product_image_path if (product_image_path and Path(product_image_path).exists()) else None
+
+        def _shot_refs(base_refs: list, shot: dict) -> list:
+            if _prod and shot.get("feature_product"):
+                return base_refs + [_prod]
+            return base_refs
 
         # Character sheet first (sheet strategy).
         char_sheet_path = None
@@ -174,7 +186,8 @@ class KeyframeGenerator:
             for i, shot in enumerate(shots):
                 kf_id = shot.get("kf_id", f"KF{i + 1}")
                 dest = str(kf_dir / f"{kf_id}.png")
-                res = self.generate_one(shot, style_lock, self._refs_for("chain", reference_path, None, prev_path), dest)
+                refs = self._shot_refs(self._refs_for("chain", reference_path, None, prev_path), shot)
+                res = self.generate_one(shot, style_lock, refs, dest)
                 entries[i] = _entry(i, shot, res)
                 if res.success:
                     prev_path = dest
@@ -187,7 +200,7 @@ class KeyframeGenerator:
                 i, shot = i_shot
                 kf_id = shot.get("kf_id", f"KF{i + 1}")
                 dest = str(kf_dir / f"{kf_id}.png")
-                refs = self._refs_for(strategy, reference_path, char_sheet_path, None)
+                refs = self._shot_refs(self._refs_for(strategy, reference_path, char_sheet_path, None), shot)
                 return i, shot, self.generate_one(shot, style_lock, refs, dest)
 
             with ThreadPoolExecutor(max_workers=4) as pool:
