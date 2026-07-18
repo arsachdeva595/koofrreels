@@ -396,6 +396,25 @@ def run_ai_pipeline(job: Job, params: dict[str, Any]) -> None:
                 _run_cinematic_finish(job, params, project_dir, project_id, storyboard, clip_manifest)
             return
 
+        # ── KEYFRAME-FIRST (standard AI modes): generate a still per scene, gate on a
+        # keyframe review, then image-to-video from the approved stills — the same review
+        # checkpoint + consistency Cinematic has. Skipped (direct video) if no image
+        # provider is configured or the step fails.
+        scene_stills: dict[int, str] = {}
+        _reel_type = params.get("reel_type", "story")
+        if not skip_storyboard and _keyframe_provider_ready():
+            _char = params.get("character_image_path")
+            _prod = params.get("product_image_path")
+            _kf = params.get("keyframe_paths") or []
+            _prod_scenes = ({s["scene"] for s in scenes if s.get("feature_product")}
+                            if (_reel_type == "product" and _prod) else set())
+            try:
+                scene_stills = _run_standard_keyframes(
+                    job, project_dir, scenes, _reel_type, _char, _prod, _kf, _prod_scenes)
+            except Exception as _exc:
+                job.update(message=f"Keyframe step skipped ({_exc}) — generating video directly")
+                scene_stills = {}
+
         # ── STAGE 3: voiceover TTS ─────────────────────────────────────────────
         job.begin_stage("voiceover", "Generating Voiceover", "Sending script to ElevenLabs...")
         job.update(progress_pct=20)
@@ -542,7 +561,12 @@ def run_ai_pipeline(job: Job, params: dict[str, Any]) -> None:
 
             image_path = None
             reference_image_paths = None
-            if reel_type == "ugc" and character_image_path and product_image_path:
+            _still = scene_stills.get(scene["scene"]) if scene_stills else None
+            if _still:
+                # Keyframe-first: image-to-video from the approved still (which already
+                # bakes in the creator/product/scene look you reviewed).
+                image_path = _still
+            elif reel_type == "ugc" and character_image_path and product_image_path:
                 # UGC: send BOTH the creator and the product as reference ("asset")
                 # images so Veo3 keeps them together — the model holding/showing the
                 # product — in every shot.
@@ -1087,26 +1111,36 @@ def _run_cinematic_keyframes(job: Job, params: dict, project_dir: Path, project_
 
 
 def regenerate_cinematic_keyframe(job: Job, kf_id: str, image_prompt: str | None = None) -> dict:
-    """Reshoot a single keyframe still during the continuity gate (C6), re-run its drift
-    check, and patch the live approval payload in place. Returns the updated entry."""
+    """Reshoot a single keyframe still during the review gate, re-run its drift check,
+    and patch the live approval payload in place. Handles both the Cinematic keyframes
+    and the standard-AI keyframes (which use a stored per-scene prompt + references)."""
     ctx = getattr(job, "cinematic_ctx", None)
     if not ctx:
-        raise RuntimeError("This job has no cinematic keyframe context to regenerate from.")
+        raise RuntimeError("This job has no keyframe context to regenerate from.")
 
     shot = next((s for s in ctx["shots"] if s.get("kf_id") == kf_id), None)
     if shot is None:
         raise RuntimeError(f"Unknown keyframe id: {kf_id}")
-    if image_prompt:
-        shot = {**shot, "image_prompt": image_prompt}
 
     dest = str(Path(ctx["keyframes_dir"]) / f"{kf_id}.png")
-    res = KeyframeGenerator().regenerate(
-        shot, ctx["style_lock"], ctx["reference_path"], ctx.get("char_sheet"), dest, ctx["strategy"],
-    )
+    ref_paths = ctx.get("reference_paths") or []
+
+    if ctx.get("standard_keyframes"):
+        # Standard modes: regenerate directly from the stored mode-aware prompt (+ any
+        # user edit) and the scene's own reference images — no character-sheet strategy.
+        prompt = image_prompt or shot.get("full_prompt") or shot.get("image_prompt", "")
+        res = KeyframeGenerator()._generate_image(prompt, shot.get("refs", []), dest)
+    else:
+        if image_prompt:
+            shot = {**shot, "image_prompt": image_prompt}
+        res = KeyframeGenerator().regenerate(
+            shot, ctx["style_lock"], ctx["reference_path"], ctx.get("char_sheet"), dest, ctx["strategy"],
+        )
     if not res.success:
         raise RuntimeError(f"Keyframe regeneration failed: {res.error}")
 
-    verdict = ContinuityChecker()._check_one(dest, ctx["reference_paths"])
+    verdict = (ContinuityChecker()._check_one(dest, ref_paths) if ref_paths
+               else {"pass": True, "issues": [], "severity": "ok"})
     updated = {
         "kf_id": kf_id,
         "filename": f"{kf_id}.png",
@@ -1127,6 +1161,127 @@ def regenerate_cinematic_keyframe(job: Job, kf_id: str, image_prompt: str | None
     data["flagged_count"] = _flagged_count(keyframes)
     job.approval_data = data
     return {**updated, "flagged_count": data["flagged_count"]}
+
+
+def _keyframe_provider_ready() -> bool:
+    """Whether an image provider is configured to generate standard-mode keyframes."""
+    prov = (settings_manager.get("cinematic_keyframe_provider", "fal") or "fal").lower()
+    if prov == "fal":
+        return bool(os.getenv("FAL_API_KEY") or settings_manager.get("fal_api_key"))
+    if prov == "google":
+        return bool(settings_manager.get("vertex_project_id"))
+    if prov == "wavespeed":
+        return bool(settings_manager.get("wavespeed_api_key"))
+    return False
+
+
+def _standard_still_prompt(scene: dict, has_person_ref: bool, has_product_ref: bool, no_characters: bool) -> str:
+    base = (scene.get("visual_description", "") or "").strip()
+    hint = (scene.get("clip_hint", "") or "").strip()
+    parts = [f"Vertical 9:16 cinematic film still, photorealistic. {base}"]
+    if hint:
+        parts.append(hint)
+    if has_person_ref:
+        parts.append("The person is the SAME individual as the reference image — identical face, "
+                     "hair, skin tone and wardrobe; never a look-alike.")
+    if has_product_ref:
+        parts.append("Feature the exact product from the reference image — matching shape, colour and details.")
+    if no_characters:
+        parts.append("NO people, humans or body parts anywhere — only objects, product, scenery and textures.")
+    parts.append("Render NO text, words, letters, captions, watermarks or logos anywhere in the image.")
+    return " ".join(parts)
+
+
+def _run_standard_keyframes(job: Job, project_dir: Path, scenes: list[dict], reel_type: str,
+                            character_image_path: str | None, product_image_path: str | None,
+                            keyframe_paths: list, product_scene_nums: set) -> dict:
+    """Generate one keyframe still per scene (mode-appropriate references + prompt), run a
+    continuity check for person-consistent modes, and gate on a keyframe review (reusing
+    the Cinematic review UI/endpoints). Returns {scene_num: still_path} for approved stills."""
+    keyframes_dir = project_dir / "keyframes"
+    keyframes_dir.mkdir(parents=True, exist_ok=True)
+    no_characters = reel_type == "none"
+    if (settings_manager.get("cinematic_keyframe_provider", "fal") or "fal").lower() == "fal":
+        os.environ.setdefault("FAL_API_KEY", os.getenv("FAL_API_KEY", "") or settings_manager.get("fal_api_key", ""))
+    kg = KeyframeGenerator()
+
+    def _refs(i: int, scene: dict) -> list:
+        sn = scene["scene"]
+        if reel_type == "ugc":
+            return [p for p in (character_image_path, product_image_path) if p]
+        if reel_type == "character":
+            return [character_image_path] if character_image_path else []
+        if reel_type == "product" and sn in product_scene_nums and product_image_path:
+            return [product_image_path]
+        if reel_type == "story" and keyframe_paths:
+            return [keyframe_paths[i % len(keyframe_paths)]]
+        return []
+
+    shots = []
+    for i, scene in enumerate(scenes):
+        refs = _refs(i, scene)
+        has_person = reel_type in ("character", "ugc") and bool(character_image_path)
+        has_product = bool(product_image_path) and (
+            reel_type == "ugc" or (reel_type == "product" and scene["scene"] in product_scene_nums))
+        shots.append({
+            "kf_id": f"KF{scene['scene']}", "scene": scene["scene"],
+            "image_prompt": scene.get("visual_description", ""),
+            "full_prompt": _standard_still_prompt(scene, has_person, has_product, no_characters),
+            "refs": refs,
+        })
+
+    job.begin_stage("keyframe_generation", "Generating Keyframes", "Creating a still per scene for your review...")
+    job.update(progress_pct=13)
+
+    def _gen(i_shot):
+        i, shot = i_shot
+        dest = str(keyframes_dir / f"{shot['kf_id']}.png")
+        return i, shot, dest, kg._generate_image(shot["full_prompt"], shot["refs"], dest)
+
+    entries_by_i: dict[int, dict] = {}
+    done = 0
+    with ThreadPoolExecutor(max_workers=4) as pool:
+        futures = [pool.submit(_gen, (i, s)) for i, s in enumerate(shots)]
+        for fut in as_completed(futures):
+            i, shot, dest, res = fut.result()
+            done += 1
+            entries_by_i[i] = {
+                "kf_id": shot["kf_id"], "scene": shot["scene"], "filename": f"{shot['kf_id']}.png",
+                "local_path": dest, "image_prompt": shot["image_prompt"],
+                "success": bool(res.success), "error": (res.error if not res.success else None),
+            }
+            job.update(progress_pct=13 + int(done / len(shots) * 10), message=f"Keyframe {done}/{len(shots)}")
+    entries = [entries_by_i[i] for i in sorted(entries_by_i)]
+    ok = sum(1 for e in entries if e["success"])
+    if ok < 2:
+        first = next((e["error"] for e in entries if e.get("error")), "unknown error")
+        raise RuntimeError(f"Only {ok}/{len(shots)} keyframes generated — need at least 2. {first}")
+    job.end_stage("keyframe_generation", f"{ok}/{len(shots)} keyframes generated — review before video")
+
+    ref_paths = [p for p in (character_image_path, product_image_path) if p]
+    verdicts: dict = {}
+    if reel_type in ("character", "ugc") and character_image_path:
+        job.begin_stage("continuity_qa", "Continuity Check", "Checking the creator looks consistent...")
+        verdicts = ContinuityChecker().check_entries(entries, ref_paths)
+        job.end_stage("continuity_qa", "Consistency checked")
+
+    keyframes_payload = _build_keyframes_payload(entries, verdicts)
+    job.cinematic_ctx = {
+        "project_dir": str(project_dir), "keyframes_dir": str(keyframes_dir),
+        "reference_path": (character_image_path if reel_type in ("character", "ugc")
+                           else product_image_path if reel_type == "product" else None),
+        "reference_paths": ref_paths, "char_sheet": None, "style_lock": "", "strategy": "none",
+        "shots": shots, "standard_keyframes": True,
+    }
+    job.request_approval({
+        "reel_summary": {"mode": "ai_reels", "reel_type": reel_type, "scene_count": len(scenes)},
+        "policy_flags": [], "cinematic": True, "continuity": True, "style_lock": "",
+        "keyframes": keyframes_payload, "flagged_count": _flagged_count(keyframes_payload),
+    })
+    if not job.wait_for_approval(timeout=1800):
+        raise RuntimeError("Keyframe approval timed out after 30 minutes")
+
+    return {e["scene"]: e["local_path"] for e in entries if e["success"]}
 
 
 # ── Cinematic M3: clip generation (still → video, provider-selectable) ─────────
