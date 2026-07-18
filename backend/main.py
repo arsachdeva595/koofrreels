@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import threading
 import uuid
+from datetime import datetime
 from pathlib import Path
 from typing import Any
 
@@ -22,7 +23,7 @@ try:
 except Exception:
     pass
 
-from backend.config import MUSIC_LIBRARY_PATH, UPLOADS_DIR
+from backend.config import MUSIC_LIBRARY_PATH, UPLOADS_DIR, PROJECTS_DIR
 from backend.job_manager import JobStatus, job_manager
 from backend.pipeline_runner import run_pipeline
 from backend.meme_runner import run_meme_pipeline
@@ -75,6 +76,84 @@ async def help_page():
     if page.exists():
         return HTMLResponse(page.read_text())
     raise HTTPException(status_code=404, detail="Help page not found")
+
+
+@app.get("/history", response_class=HTMLResponse)
+async def history_page():
+    page = frontend_dir / "history.html"
+    if page.exists():
+        return HTMLResponse(page.read_text())
+    raise HTTPException(status_code=404, detail="History page not found")
+
+
+# ── History / past generations ───────────────────────────────────────────────
+_MODE_LABELS = {"ai": "AI Reels", "proj": "Reels", "stock": "Stock",
+                "meme": "Meme", "audio": "Audio", "studio": "Studio"}
+
+
+def _find_output_video(project_dir: Path) -> Path | None:
+    """The delivered reel for a project, if any (largest mp4 in output/)."""
+    out = project_dir / "output"
+    if out.exists():
+        vids = sorted(out.glob("*.mp4"), key=lambda p: p.stat().st_size, reverse=True)
+        if vids:
+            return vids[0]
+    return None
+
+
+@app.get("/api/history")
+async def list_history():
+    """List past generations (newest first) — successes (have a delivered reel) and
+    incomplete/failed runs. Scans the projects directory on disk."""
+    items = []
+    if PROJECTS_DIR.exists():
+        for d in PROJECTS_DIR.iterdir():
+            if not d.is_dir():
+                continue
+            prefix = d.name.split("-")[0]
+            mode = _MODE_LABELS.get(prefix, prefix)
+            if (d / "cinematic_contract.json").exists():
+                mode = "Cinematic"
+            vid = _find_output_video(d)
+            st = d.stat()
+            item = {
+                "project_id": d.name,
+                "mode": mode,
+                "created": datetime.fromtimestamp(st.st_mtime).strftime("%Y-%m-%d %H:%M"),
+                "created_epoch": st.st_mtime,
+                "status": "success" if vid else "incomplete",
+            }
+            if vid:
+                item["filename"] = vid.name
+                item["size_mb"] = round(vid.stat().st_size / 1e6, 1)
+            items.append(item)
+    items.sort(key=lambda x: x["created_epoch"], reverse=True)
+    return {"projects": items, "count": len(items)}
+
+
+def _safe_project_dir(project_id: str) -> Path:
+    d = (PROJECTS_DIR / Path(project_id).name).resolve()
+    if PROJECTS_DIR.resolve() not in d.parents or not d.is_dir():
+        raise HTTPException(status_code=404, detail="Project not found")
+    return d
+
+
+@app.get("/api/history/{project_id}/video")
+async def history_video(project_id: str):
+    """Stream a past project's delivered reel (for in-page preview)."""
+    vid = _find_output_video(_safe_project_dir(project_id))
+    if not vid:
+        raise HTTPException(status_code=404, detail="No delivered reel for this project")
+    return FileResponse(str(vid), media_type="video/mp4")
+
+
+@app.get("/api/history/{project_id}/download")
+async def history_download(project_id: str):
+    """Download a past project's delivered reel."""
+    vid = _find_output_video(_safe_project_dir(project_id))
+    if not vid:
+        raise HTTPException(status_code=404, detail="No delivered reel for this project")
+    return FileResponse(str(vid), media_type="video/mp4", filename=f"{Path(project_id).name}.mp4")
 
 
 # ── Koofr endpoints ────────────────────────────────────────────────────────────

@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>KoofrReels — History</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #0d0d0d; color: #f0f0f0; min-height: 100vh; }
+    header { padding: 18px 32px; border-bottom: 1px solid #222; display: flex; align-items: center; justify-content: space-between; }
+    header h1 { font-size: 20px; font-weight: 700; }
+    .nav-link { font-size: 13px; color: #888; text-decoration: none; padding: 6px 12px; border-radius: 6px; border: 1px solid #333; transition: all 0.15s; }
+    .nav-link:hover { color: #fff; border-color: #555; }
+
+    .wrap { max-width: 1100px; margin: 0 auto; padding: 28px 32px 60px; }
+    .toolbar { display: flex; align-items: center; justify-content: space-between; margin-bottom: 20px; flex-wrap: wrap; gap: 12px; }
+    .toolbar .sub { font-size: 13px; color: #777; }
+    .filters { display: flex; gap: 6px; }
+    .filter { padding: 6px 12px; border-radius: 7px; border: 1px solid #2a2a2a; background: #161616; color: #aaa; font-size: 12px; cursor: pointer; }
+    .filter.active { background: #1e1428; border-color: #7c3aed; color: #a78bfa; font-weight: 600; }
+    .btn-refresh { padding: 6px 12px; border-radius: 7px; border: 1px solid #333; background: #1a1a1a; color: #ccc; font-size: 12px; cursor: pointer; }
+    .btn-refresh:hover { border-color: #555; color: #fff; }
+
+    .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 16px; }
+    .card { background: #151515; border: 1px solid #262626; border-radius: 11px; overflow: hidden; display: flex; flex-direction: column; }
+    .card .thumb { background: #0a0a0a; aspect-ratio: 9/16; max-height: 300px; display: flex; align-items: center; justify-content: center; position: relative; }
+    .card video { width: 100%; height: 100%; object-fit: contain; background: #000; }
+    .card .thumb .placeholder { color: #444; font-size: 40px; }
+    .card .body { padding: 12px 14px; }
+    .row { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 6px; }
+    .mode-badge { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; padding: 3px 8px; border-radius: 5px; background: #1e1428; color: #a78bfa; }
+    .status { font-size: 10px; font-weight: 700; text-transform: uppercase; padding: 3px 8px; border-radius: 5px; }
+    .status.success { background: #0f2417; color: #6ee7b7; }
+    .status.incomplete { background: #2a1207; color: #fbbf7a; }
+    .pid { font-size: 11px; color: #666; font-family: 'Menlo', monospace; word-break: break-all; }
+    .meta { font-size: 11px; color: #777; margin-top: 4px; }
+    .actions { display: flex; gap: 8px; margin-top: 10px; }
+    .btn-dl { flex: 1; text-align: center; padding: 8px; border-radius: 7px; background: #7c3aed; color: #fff; font-size: 12px; font-weight: 600; text-decoration: none; }
+    .btn-dl:hover { background: #6d28d9; }
+    .empty { text-align: center; color: #555; padding: 80px 20px; font-size: 14px; }
+    .loading { text-align: center; color: #777; padding: 60px; font-size: 13px; }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>🗂 History</h1>
+    <a href="/" class="nav-link">← Back to Studio</a>
+  </header>
+
+  <div class="wrap">
+    <div class="toolbar">
+      <div class="sub" id="count-label">Loading past generations…</div>
+      <div style="display:flex;gap:10px;align-items:center">
+        <div class="filters">
+          <button class="filter active" data-f="all" onclick="setFilter('all', this)">All</button>
+          <button class="filter" data-f="success" onclick="setFilter('success', this)">✓ Delivered</button>
+          <button class="filter" data-f="incomplete" onclick="setFilter('incomplete', this)">Incomplete</button>
+        </div>
+        <button class="btn-refresh" onclick="load()">↻ Refresh</button>
+      </div>
+    </div>
+    <div id="content"><div class="loading">Loading…</div></div>
+  </div>
+
+  <script>
+    const API = '';
+    let projects = [];
+    let filter = 'all';
+
+    function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+
+    function setFilter(f, btn) {
+      filter = f;
+      document.querySelectorAll('.filter').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      render();
+    }
+
+    async function load() {
+      document.getElementById('content').innerHTML = '<div class="loading">Loading…</div>';
+      try {
+        const r = await fetch(`${API}/api/history`);
+        const data = await r.json();
+        projects = data.projects || [];
+        render();
+      } catch (e) {
+        document.getElementById('content').innerHTML = `<div class="empty">Couldn't load history: ${esc(e.message)}</div>`;
+      }
+    }
+
+    function render() {
+      const list = projects.filter(p => filter === 'all' ? true : p.status === filter);
+      const nSucc = projects.filter(p => p.status === 'success').length;
+      document.getElementById('count-label').textContent =
+        `${projects.length} generation${projects.length === 1 ? '' : 's'} · ${nSucc} delivered`;
+
+      if (!list.length) {
+        document.getElementById('content').innerHTML = `<div class="empty">No ${filter === 'all' ? '' : filter + ' '}generations yet.</div>`;
+        return;
+      }
+      document.getElementById('content').innerHTML = '<div class="grid">' + list.map(p => {
+        const isOk = p.status === 'success';
+        const thumb = isOk
+          ? `<video preload="metadata" controls src="${API}/api/history/${encodeURIComponent(p.project_id)}/video#t=0.1"></video>`
+          : `<div class="placeholder">🎬</div>`;
+        const meta = isOk ? `${p.size_mb} MB · ${esc(p.filename || 'reel.mp4')}` : 'No delivered reel';
+        const dl = isOk ? `<a class="btn-dl" href="${API}/api/history/${encodeURIComponent(p.project_id)}/download" download>⬇ Download</a>` : '';
+        return `<div class="card">
+          <div class="thumb">${thumb}</div>
+          <div class="body">
+            <div class="row">
+              <span class="mode-badge">${esc(p.mode)}</span>
+              <span class="status ${p.status}">${isOk ? '✓ Delivered' : 'Incomplete'}</span>
+            </div>
+            <div class="pid">${esc(p.project_id)}</div>
+            <div class="meta">${esc(p.created)} · ${meta}</div>
+            <div class="actions">${dl}</div>
+          </div>
+        </div>`;
+      }).join('') + '</div>';
+    }
+
+    load();
+  </script>
+</body>
+</html>
