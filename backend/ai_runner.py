@@ -1156,6 +1156,7 @@ def regenerate_cinematic_keyframe(job: Job, kf_id: str, image_prompt: str | None
             shot = {**shot, "image_prompt": image_prompt}
         res = KeyframeGenerator().regenerate(
             shot, ctx["style_lock"], ctx["reference_path"], ctx.get("char_sheet"), dest, ctx["strategy"],
+            product_image_path=ctx.get("product_image_path"),
         )
     if not res.success:
         raise RuntimeError(f"Keyframe regeneration failed: {res.error}")

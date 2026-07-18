@@ -240,8 +240,13 @@ class KeyframeGenerator:
         char_sheet_path: str | None,
         dest_path: str,
         strategy: str = "sheet",
+        product_image_path: str | None = None,
     ):
-        """Regenerate a single still (used by the per-shot reshoot endpoint, C6)."""
+        """Regenerate a single still (used by the per-shot reshoot endpoint, C6).
+        On a feature_product shot, the product image is re-added as a reference so the
+        reshot still keeps the product."""
         cs = char_sheet_path if (strategy == "sheet" and char_sheet_path and Path(char_sheet_path).exists()) else None
         refs = self._refs_for("sheet" if cs else "none", reference_path, cs, None)
+        if product_image_path and Path(product_image_path).exists() and shot.get("feature_product"):
+            refs = refs + [product_image_path]
         return self.generate_one(shot, style_lock, refs, dest_path)
