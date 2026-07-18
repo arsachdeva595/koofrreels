@@ -1777,7 +1777,6 @@ def _run_cinematic_plan(job: Job, params: dict, project_dir: Path, storyboard: d
     Returns (None, None, 0) when there's no voiceover — caller falls back to the
     original shot-per-clip flow."""
     from backend.pipeline_runner import _generate_scene_vo_files
-    from tools.audio.pause_detector import detect_beats, beats_to_segments
     from tools.ai.cinematic_planner import build_render_plan, plan_summary
 
     if not params.get("include_voiceover", True):
@@ -1801,6 +1800,10 @@ def _run_cinematic_plan(job: Job, params: dict, project_dir: Path, storyboard: d
     clip_secs = _provider_clip_seconds(provider)
 
     # Detect each shot's pauses → segments that tile the shot's full VO length.
+    # Split-only-when-needed: each shot is ONE segment (its full VO), so it fans into
+    # extra clips ONLY when the narration is longer than a single clip (~8s) — no cutting
+    # on internal pauses. Keeps the clip count (and Veo/fal cost) down; the full VO still
+    # plays and cuts still align to shot boundaries.
     shot_segments: dict[int, list[dict]] = {}
     ordered_vo_paths: list[str] = []
     for i, shot in enumerate(shots):
@@ -1810,21 +1813,21 @@ def _run_cinematic_plan(job: Job, params: dict, project_dir: Path, storyboard: d
             continue
         ordered_vo_paths.append(vo_path)
         dur = scene_vo_durations.get(scene_num, 0.0)
-        det = detect_beats(vo_path)
-        segs = beats_to_segments(det["beats"], det["total_duration"] or dur)
-        shot_segments[i] = segs
+        if dur <= 0:
+            continue
+        shot_segments[i] = [{"start": 0.0, "end": dur, "duration": dur}]
 
     render_plan = build_render_plan(shots, shot_segments, max_clip_seconds=float(clip_secs))
     if len(render_plan) < 2:
-        job.end_stage("voiceover", "Too few beats for pause-driven edit — using structural timing")
+        job.end_stage("voiceover", "Too few shots with voiceover — using structural timing")
         return None, None, 0.0
 
     vo_concat = _concat_vo_files(ordered_vo_paths, str(voiceover_dir / "narration_full.mp3"))
     total_sec = round(sum(u["target_duration"] for u in render_plan), 2)
     summ = plan_summary(render_plan)
     job.end_stage("voiceover",
-                  f"{len(scene_vo_files)} shot VOs · {summ['clips']} beats "
-                  f"({summ['continuation_stills']} continuation) · {total_sec:.1f}s")
+                  f"{len(scene_vo_files)} shot VOs · {summ['clips']} clips "
+                  f"({summ['continuation_stills']} extra for long shots) · {total_sec:.1f}s")
     return render_plan, vo_concat, total_sec
 
 
