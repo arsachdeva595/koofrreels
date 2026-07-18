@@ -301,13 +301,21 @@
           <tr><td>Keyframe stills</td><td>One still per scene from your references (Character/UGC also get a continuity check).</td></tr>
           <tr><td>② Keyframe review gate</td><td>You preview/reshoot the cheap stills before spending on video.</td></tr>
           <tr><td>Voiceover</td><td>ElevenLabs narrates each scene (if enabled).</td></tr>
-          <tr><td>Video clips</td><td>Each approved still → a clip. <strong>Split-only-when-needed:</strong> 1 clip/scene, extra clips only when a scene's narration is longer than one clip (~8s). The clip's own audio is dropped so it never clashes with the voiceover.</td></tr>
-          <tr><td>Edit + compose</td><td>Cuts timed so the <strong>full voiceover always plays</strong> (never cut off); text overlays; mix voiceover + music.</td></tr>
+          <tr><td>Video clips</td><td>Each approved still → a clip. <strong>Smart length:</strong> each clip is generated only as long as its scene needs (snapped to the model's options, e.g. Veo 4/6/8s) — not always the 8s max. <strong>Split-only-when-needed:</strong> 1 clip/scene, extra clips only when a scene's narration exceeds one clip. The clip's own audio is dropped so it never clashes with the voiceover.</td></tr>
+          <tr><td>Edit + compose</td><td>A <strong>soft ~0.3s dissolve</strong> between scenes (no harsh cuts), timed so the <strong>full voiceover always plays</strong> and stays in sync; text overlays; mix voiceover + music.</td></tr>
           <tr><td>Deliver</td><td>Final 9:16 MP4 + cost log; also in History.</td></tr>
         </table>
 
         <div class="tip">💡 With <strong>Generate voiceover ON</strong>, the clip audio is dropped so only your ElevenLabs narration + music play — no clashing speech. The whole voiceover always plays; a scene only becomes multiple clips when its narration is longer than one clip.</div>
         <div class="note">ℹ️ Generated clips are a few seconds each (Veo up to 8s, Kling a 5s floor). Generation takes a few minutes. The keyframe review needs an image provider configured; without one it falls back to direct video (no still review). Pick models in <a href="#" onclick="showTab('models');return false;" style="color:#a78bfa">Models &amp; Cost</a>.</div>
+
+        <h3>🆕 Fixed: Veo landscape output</h3>
+        <p>Google Veo used to default to <strong>16:9 landscape</strong> even when the scene started from a 9:16 keyframe still — the app then blurred/padded it to fit vertical, which softened the shot. Veo now explicitly requests <strong>9:16 vertical</strong> output, so clips render natively in the right aspect ratio from the start. fal and WaveSpeed were unaffected (they always inherit the aspect ratio of the input keyframe image).</p>
+
+        <h3>🆕 Fixed: Hindi / Hinglish voiceover pronunciation</h3>
+        <p>ElevenLabs used to mispronounce romanized Hindi in the voiceover — e.g. a line written <code>mai</code> (मैं) was read like the English word "main," with a hard final consonant instead of the soft nasal sound. The cause: TTS engines apply <strong>English</strong> letter-to-sound rules to Latin-spelled text, so romanized Hindi gets read as if it were English.</p>
+        <p>The fix is now automatic: the script writer spells Hindi/Hinglish words in the <strong>voiceover line</strong> using Devanagari script (मैं, है, नहीं, क्या...) while English words, numbers, and brand names stay in Latin script — natural code-switching, same as how bilingual text is actually written. ElevenLabs reads Devanagari correctly since it's real Hindi text, not a Latin lookalike. Your <strong>on-screen captions are untouched</strong> — they stay in the usual romanized Hinglish; only the spoken narration changed.</p>
+        <div class="tip">💡 There's also a small backstop for words with no real Devanagari spelling — like a coined brand name — that get respelled directly for ElevenLabs (e.g. a brand name read with an extra syllable gets shortened to the correct 2-syllable spelling). If you catch another word still coming out wrong after listening to a render, flag the exact word and how it should sound — it's a one-line fix to add.</div>
 
         <h3 style="margin-top:30px">🗣️ UGC mode — creator + product together</h3>
         <p>UGC mode generates an <strong>authentic user-generated-content style ad</strong>: a creator on camera holds, uses, and reviews your product — like a real recommendation video. You upload <strong>two images</strong> (a creator and a product); the app reads them, writes a first-person script that matches your actual creator, and builds each scene's <strong>keyframe still with the creator holding/using the product</strong> — which you review before any video is made.</p>
@@ -354,24 +362,27 @@
           <tr><td>2. 🛑 Approval gate</td><td>You review the shot list (and edit captions/VO) <strong>before any spend</strong>.</td></tr>
           <tr><td>3. Keyframe stills</td><td>The app generates a still for every shot with Nano Banana, keeping your character consistent (see <strong>Character lock</strong> below). Cheap.</td></tr>
           <tr><td>4. 🛑 Continuity gate</td><td>Claude-vision checks each still against your reference for face/wardrobe <strong>drift</strong>. You review thumbnails and <strong>reshoot any still</strong> right there — still cheap, before video.</td></tr>
-          <tr><td>5. Clips</td><td>Each approved still becomes a short silent clip via your chosen video model. Strong-motion shots use start+end-frame interpolation (on fal/Kling).</td></tr>
-          <tr><td>6. Voice + edit</td><td>Per-shot ElevenLabs voiceover; clip lengths are trimmed to the voiceover.</td></tr>
-          <tr><td>7. Grade + compose</td><td>A single colour-match grade across all clips, transitions honoured (dissolves where the director asked), captions burned in, VO + music mixed.</td></tr>
+          <tr><td>5. Clips</td><td>Each approved still becomes a short silent clip via your chosen video model. <strong>Smart clip length</strong> — each clip is generated only as long as its shot needs (snapped to the model's options, e.g. Veo 4/6/8s), not always the 8s max, so short shots cost less.</td></tr>
+          <tr><td>6. Voice + edit</td><td>Per-shot ElevenLabs voiceover; clip lengths are matched to the voiceover so the whole narration plays. A shot only becomes multiple clips if its narration is longer than one clip.</td></tr>
+          <tr><td>7. Grade + compose</td><td>A single colour-match grade across all clips, a <strong>soft ~0.3s dissolve</strong> between shots (no harsh cuts, voiceover stays in sync), captions burned in, VO + music mixed.</td></tr>
           <tr><td>8. Deliver</td><td>A graded 9:16 MP4, plus an <strong>estimated cost</strong> and a <strong>Review inputs</strong> button (see below).</td></tr>
         </table>
 
         <h3>Two approval gates</h3>
         <p>Cinematic pauses <strong>twice</strong> — first on the shot plan, then on the generated stills (the <strong>Continuity Review</strong> tab). The continuity gate is your money-saver: catch a wrong face or outfit on a $0.04 still and reshoot it, instead of paying for a bad video clip. See <a href="#" onclick="showTab('approve');return false;" style="color:#a78bfa">Review &amp; Approve</a>.</p>
 
+        <h3>Add a product (optional)</h3>
+        <p>Tick <strong>"Include a product"</strong> under the character upload to reveal a <strong>🛍️ Product Image</strong> upload. When set, the director reads the product and <strong>weaves it into the storyline</strong> — showing it in the payoff and 1–2 hero shots — and those keyframe stills are generated with <strong>your character holding/using the exact product</strong> (character-locked as always). Non-product shots stay pure scene-setting. Reshooting a product hero still keeps the product. Leave it off for a character-only cinematic.</p>
+
         <h3>How to make a Cinematic reel</h3>
         <div class="steps">
           <ol>
             <li>Open <strong>🤖 AI Reels</strong> and pick the <strong>🎥 Cinematic</strong> type.</li>
-            <li>Upload <strong>one</strong> clear, well-lit character reference image (face visible).</li>
+            <li>Upload <strong>one</strong> clear, well-lit character reference image (face visible). <em>Optional:</em> tick <strong>Include a product</strong> and upload a clean product image.</li>
             <li>Write your <strong>storyline</strong> and set the <strong>Duration</strong>.</li>
-            <li>Click <strong>Generate</strong>. Review the <strong>shot plan</strong> → Approve.</li>
+            <li>Click <strong>Generate</strong>. Review the <strong>shot plan</strong> (and the estimated cost) → Approve.</li>
             <li>Wait for the stills, then on the <strong>🎞 Continuity Review</strong> tab check each one; <strong>reshoot</strong> any that drifted (edit its prompt first if you like) → Approve stills.</li>
-            <li>The clips, voiceover, grade and compose run automatically → preview, download, or publish.</li>
+            <li>The clips, voiceover, grade and compose run automatically → preview, download, or grab it later from <a href="#" onclick="showTab('output');return false;" style="color:#a78bfa">History</a>.</li>
           </ol>
         </div>
 
@@ -387,6 +398,7 @@
 
         <div class="tip">💡 Character stays the same but a shot looks like a copy of the last? That's the character sheet dominating — switch <strong>Character lock</strong> to <strong>None</strong> in Settings so each shot follows its own prompt more.</div>
         <div class="note">ℹ️ Cinematic clips are made <strong>silent of speech</strong> on purpose — your ElevenLabs voice is the only narration. On-screen captions come from the director's per-shot text (editable at the first gate).</div>
+        <div class="note">🆕 <strong>Fixed:</strong> Veo shots now render natively in 9:16 vertical (they used to default to landscape and get blur-padded to fit — see <a href="#" onclick="showTab('ai');return false;" style="color:#a78bfa">AI Reels</a> for detail). Voiceover (vo_text) lines with Hindi/Hinglish are now auto-written in Devanagari script so ElevenLabs pronounces them correctly — on-screen captions are unaffected, same fix as AI Reels.</div>
       </div>
 
       <!-- ── MEME CLIPS ─────────────────────────────────────────────────────── -->
@@ -490,6 +502,7 @@
           <tr><td>WaveSpeed</td><td>Enter a WaveSpeed model slug (e.g. <code>wavespeed-ai/wan-i2v-480p</code>). Also image-to-video.</td></tr>
         </table>
         <div class="note">ℹ️ fal &amp; WaveSpeed are <strong>image-to-video</strong>: they need a first-frame image. For text-only scenes the app automatically falls back to Google Veo if your Vertex project is configured; otherwise it tells you to switch to Veo.</div>
+        <div class="note">ℹ️ All three providers now render natively in <strong>9:16 vertical</strong> — Google Veo used to default to landscape (fixed by explicitly requesting 9:16); fal/WaveSpeed always matched the input keyframe image.</div>
 
         <h3>fal video models &amp; rough cost</h3>
         <p>When the provider is fal, pick from the dropdown — labels show an <strong>approximate per-second rate</strong> (verify exact pricing on the model's fal page). Video bills <strong>per second</strong>.</p>
@@ -519,11 +532,13 @@
         </div>
         <table>
           <tr><th>Lever</th><th>Effect</th></tr>
+          <tr><td>🆕 Smart clip length</td><td>Automatic — each clip is now generated only as long as its scene needs (Veo 4/6/8s, Kling 5/10s), not always the 8s max. A 3s scene → a 4s Veo clip ≈ <strong>half</strong> that clip's cost.</td></tr>
+          <tr><td>🆕 Split-only-when-needed</td><td>Automatic — a scene becomes 1 clip unless its narration is longer than one clip, so you're not paying for extra clips per scene.</td></tr>
           <tr><td>Cheaper model</td><td>Kling 2.1 <em>Standard</em> (~$0.045/s) or WAN (~$0.03/s) instead of Kling Pro (~$0.098/s) ≈ <strong>2–3× cheaper</strong>.</td></tr>
-          <tr><td>Longer shots</td><td>Raise <strong>Shot length</strong> to ~5s → fewer, longer clips → fewer 5s billings for the same reel (≈ half the clips).</td></tr>
+          <tr><td>Longer shots</td><td>Raise <strong>Shot length</strong> so fewer, longer clips cover the reel (fewer floor billings).</td></tr>
           <tr><td>Continuity gate</td><td>Reshoot bad <strong>stills</strong> ($0.04) instead of bad <strong>clips</strong> ($0.25–0.60).</td></tr>
         </table>
-        <div class="tip">💡 Iterate on <strong>fal → Kling 2.1 Standard</strong> (or WAN) at ~5s shots to keep drafts around <strong>$1–1.5</strong>, then switch to <strong>Kling Pro</strong> for the final render once you're happy with the shot list.</div>
+        <div class="tip">💡 Iterate on <strong>fal → Kling 2.1 Standard</strong> (or WAN) to keep drafts cheap, then switch to <strong>Kling Pro</strong> for the final render once you're happy with the shot list. The <strong>cost estimate at the script gate</strong> shows the number before you approve.</div>
 
         <h3>See exactly what you spent &amp; sent</h3>
         <p>Every finished reel shows an <strong>Est. cost</strong> and a <strong>📋 Review inputs &amp; cost</strong> button. It opens two tabs:</p>
