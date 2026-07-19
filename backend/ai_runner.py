@@ -37,6 +37,7 @@ from tools.ai.veo3_client import Veo3Client, VEO3_MAX_DURATION
 from tools.ai.fal_client import FalClient
 from tools.ai.wavespeed_client import WaveSpeedClient
 from tools.ai.keyframe_generator import KeyframeGenerator
+from tools.ai.realism_prompts import ANATOMY_ARTIFACT_NEGATIVE, POSITIVE_REALISM_TAG
 from tools.ai.continuity_checker import ContinuityChecker
 from tools.analysis.clip_analyzer import ClipAnalyzer
 from tools.analysis.audio_prober import AudioProber
@@ -600,6 +601,7 @@ def run_ai_pipeline(job: Job, params: dict[str, Any]) -> None:
                 prompt = f'{prompt}. Character says: "{dialogue}"'
             if filter_descriptor:
                 prompt = f"{prompt}. Look: {filter_descriptor}"
+            prompt = f"{prompt}. {POSITIVE_REALISM_TAG}."
 
             # Smart clip length: generate only as long as this scene needs (snapped to
             # the provider's valid lengths), so a short scene isn't billed as a full clip.
@@ -628,7 +630,9 @@ def run_ai_pipeline(job: Job, params: dict[str, Any]) -> None:
                 # flagged as showcase ("hero") scenes — others stay pure text-to-video.
                 image_path = product_image_path
 
-            neg_prompt = _VEO3_NO_SPEECH if vo_on else ""
+            neg_prompt = (
+                f"{_VEO3_NO_SPEECH}, {ANATOMY_ARTIFACT_NEGATIVE}" if vo_on else ANATOMY_ARTIFACT_NEGATIVE
+            )
             veo_model = ugc_model if reference_image_paths else standard_model
 
             result = _generate_video_clip(
@@ -1252,6 +1256,7 @@ def _standard_still_prompt(scene: dict, has_person_ref: bool, has_product_ref: b
     if no_characters:
         parts.append("NO people, humans or body parts anywhere — only objects, product, scenery and textures.")
     parts.append("Render NO text, words, letters, captions, watermarks or logos anywhere in the image.")
+    parts.append(POSITIVE_REALISM_TAG + ".")
     return " ".join(parts)
 
 
@@ -1357,7 +1362,8 @@ _CINEMATIC_NO_SPEECH = (
     "singing, lip movement, subtitles, captions, "
     # Style descriptors (e.g. "shot on Kodak") must affect the LOOK only — never
     # appear as literal text/letters/logos burned into the frame.
-    "on-screen text, words, letters, typography, captions, watermark, logo, brand name"
+    "on-screen text, words, letters, typography, captions, watermark, logo, brand name, "
+    + ANATOMY_ARTIFACT_NEGATIVE
 )
 
 
@@ -1455,7 +1461,7 @@ def _run_cinematic_clips(job: Job, params: dict, project_dir: Path, project_id: 
     def _gen(task: tuple) -> tuple:
         i, shot, still_path = task
         kf_id = shot.get("kf_id", f"KF{i + 1}")
-        video_prompt = f"{shot.get('video_prompt', '').strip()}. STYLE: {style_lock}".strip()
+        video_prompt = f"{shot.get('video_prompt', '').strip()}. STYLE: {style_lock}. {POSITIVE_REALISM_TAG}".strip()
         dest = str(clips_dir / f"clip_{i:03d}_{kf_id}.mp4")
 
         # End frame for needs_end_frame shots (first-last interpolation; fal only).
@@ -1591,7 +1597,7 @@ def _capture_cinematic_inputs(storyboard: dict, provider: str, kf_endpoint: str,
             "image_prompt": s.get("image_prompt", ""),
             "still_prompt_sent": kg._still_prompt(s, style_lock),
             "video_prompt": s.get("video_prompt", ""),
-            "clip_prompt_sent": f"{s.get('video_prompt', '').strip()}. STYLE: {style_lock}".strip(),
+            "clip_prompt_sent": f"{s.get('video_prompt', '').strip()}. STYLE: {style_lock}. {POSITIVE_REALISM_TAG}".strip(),
             "vo_text": s.get("vo_text", ""), "overlay_text": s.get("overlay_text", ""),
         })
     return {
@@ -1981,7 +1987,7 @@ def _run_cinematic_clips_planned(job: Job, params: dict, project_dir: Path,
     def _gen(u):
         shot = shots[u["shot_index"]]
         still = str(keyframes_dir / f"{u['still_id']}.png")
-        video_prompt = f"{shot.get('video_prompt', '').strip()}. STYLE: {style_lock}".strip()
+        video_prompt = f"{shot.get('video_prompt', '').strip()}. STYLE: {style_lock}. {POSITIVE_REALISM_TAG}".strip()
         dest = str(clips_dir / f"clip_{u['order']:03d}_{u['still_id']}.mp4")
         # Smart clip length: only as long as this beat needs.
         _dur = _snap_clip_duration(provider, float(u.get("target_duration") or clip_secs))

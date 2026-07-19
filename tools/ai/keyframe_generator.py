@@ -20,6 +20,7 @@ from typing import Callable
 
 from backend import settings_manager
 from tools.ai.fal_client import FalClient
+from tools.ai.realism_prompts import POSITIVE_REALISM_TAG
 
 # Shot-type → plain-English framing so the image model honours the cinematography.
 _SHOT_TYPE_PHRASE = {
@@ -105,6 +106,7 @@ class KeyframeGenerator:
                "colour and details; the person is holding / using / presenting it naturally. "
                if shot.get("feature_product") else "")
             + f"Overall look (affects grain/colour/lighting ONLY): {style_lock}. "
+            f"{POSITIVE_REALISM_TAG}. "
             "IMPORTANT: render NO text, words, letters, captions, watermarks, brand names or logos "
             "anywhere in the image — film-stock names like 'Kodak' describe the look, they must never "
             "appear as visible text."

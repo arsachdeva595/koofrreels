@@ -598,6 +598,34 @@ TTS PRONUNCIATION (voiceover/vo_text only — this field is read aloud by Eleven
 - overlay_text (the on-screen caption) is unaffected — keep it romanized Hinglish as usual. Only
   the spoken voiceover/vo_text needs Devanagari for correct pronunciation."""
 
+_PHYSICAL_REALISM_RULES = """PHYSICAL REALISM RULES (video-generation models fail on ambiguity — remove every degree of freedom you can):
+- ONE dominant action per scene/shot. Never stack simultaneous actions (e.g. not "walks while adjusting
+  the bag while smiling while turning") — pick the single action that matters and hold it.
+- Use simple, deliberate motion verbs: "steady walk", "slow turn", "gentle reach", "subtle gesture".
+  Avoid complex, fast, or acrobatic movement descriptions — the more moving parts requested, the more
+  likely limbs/hands render wrong.
+- Anchor hands to a specific object or surface whenever a person is on screen (a strap, a cup, a
+  railing, their own pocket) rather than free/open gesture space — unanchored hands are the single
+  biggest source of extra-finger and extra-limb errors.
+- Describe only ONE continuous, physically coherent motion arc per scene — no mid-scene teleporting
+  pose changes."""
+
+_PRODUCT_PHYSICS_RULES = """PRODUCT PHYSICS — HOW THE PRODUCT MUST PHYSICALLY RELATE TO THE BODY:
+Before writing any visual_description/image_prompt/video_prompt that shows a person with the product,
+reason from the product description about how this SPECIFIC object is actually worn/carried/used in
+real life, then describe THAT — never default to vague "holding" or "using":
+- Bags/totes with shoulder straps: worn ON THE SHOULDER or in the crook of the elbow, or held BY THE
+  HANDLE at the side — never around the neck (shoulder straps are the wrong length and shape for that).
+- Crossbody/sling bags: strap diagonally across the torso, bag resting at the hip.
+- Bottles/cups/phones/small items: gripped in one hand, fingers wrapped around the body of the object,
+  the hand anchored there for the whole shot.
+- Clothing/wearables: describe it already worn correctly in frame (fastened, draped, fitted) — don't
+  show a mid-motion "putting it on" unless that IS the one dominant action of the shot.
+- If unsure how an item is normally worn or carried, describe it resting in/on a surface instead of
+  guessing at an on-body position.
+- Never describe two simultaneous product interactions (e.g. holding it up AND adjusting a strap) —
+  pick one physically consistent state and hold it for the whole shot."""
+
 
 def _generate_storyboard(reel_brief: dict) -> dict:
     import anthropic
@@ -674,6 +702,8 @@ The reel must sell/showcase this specific product:
   "feature_product": false.
 - For feature_product scenes, the visual_description should center the product (its look, use, detail).
 - Keep visual_description in English (Veo3 rule above).
+
+{_PRODUCT_PHYSICS_RULES}
 """) if _is_product else ""
 
     _ugc_section = (f"""
@@ -685,12 +715,16 @@ this product, talking to the camera like a genuine personal recommendation:
   voiceover. Use natural spoken language ("okay so", "honestly", "wait — look at this").
 - The SAME creator (the exact person described in the ON-CAMERA PERSON section) appears in EVERY
   scene, holding / using / showing the product to camera.
-- Every visual_description MUST show the creator AND the product together — describe the person's
-  action with the product (e.g. "the creator holding the tan tote bag up to camera, smiling, casual
-  sunlit room"), the framing, and the vibe. Keep it natural and selfie/handheld in feel. Do NOT
-  assume a gender — use the ON-CAMERA PERSON description above.
+- Every visual_description MUST show the creator AND the product together, with the product
+  positioned the way it is ACTUALLY worn/carried per PRODUCT PHYSICS below (e.g. "the creator with
+  the tan tote bag's strap resting on her shoulder, one hand loosely gripping the strap near her
+  collarbone, smiling, casual sunlit room" — not just "holding it up"), the framing, and the vibe.
+  Keep it natural and selfie/handheld in feel. Do NOT assume a gender — use the ON-CAMERA PERSON
+  description above.
 - Mark product close-up / showcase beats "feature_product": true; talking-head beats "feature_product": false.
 - Keep visual_description in English (Veo3 rule above).
+
+{_PRODUCT_PHYSICS_RULES}
 """) if _is_ugc else ""
 
     _no_characters_section = """
@@ -715,6 +749,7 @@ ENTIRELY through objects and scenery, with zero human presence in the generated 
         + _HOOK_ARCHITECTURE + "\n\n"
         + _RETENTION_RULES + "\n\n"
         + _VOICEOVER_RULES + "\n\n"
+        + _PHYSICAL_REALISM_RULES + "\n\n"
         + fw["roles_block"] + "\n"
         + (_google_policy_section if _is_ai_reels else "")
         + (_no_characters_section if _no_characters else "")
@@ -938,9 +973,12 @@ def _generate_cinematic_storyboard(reel_brief: dict) -> dict:
         f"\nPRODUCT — WEAVE THIS PRODUCT INTO THE STORY:\n"
         f"  {_product_desc}\n"
         "- Build the sequence so the product appears naturally as part of the narrative (the payoff and\n"
-        "  1–2 hero shots where the character holds / uses / presents it). Not every shot needs it.\n"
-        "- For shots that show the product, set \"feature_product\": true and describe the product in that\n"
-        "  shot's image_prompt/video_prompt. For all other shots set \"feature_product\": false.\n"
+        "  1–2 hero shots where the character carries/wears/uses it in a physically correct way for\n"
+        "  this specific product — see PRODUCT PHYSICS below). Not every shot needs it.\n"
+        "- For shots that show the product, set \"feature_product\": true and describe the product's\n"
+        "  exact physical placement on/with the body in that shot's image_prompt/video_prompt. For all\n"
+        "  other shots set \"feature_product\": false.\n"
+        f"\n{_PRODUCT_PHYSICS_RULES}\n"
     ) if _product_desc else ""
 
     # Lock every shot's image_prompt/video_prompt to the ACTUAL uploaded/preset reference so
@@ -998,6 +1036,7 @@ TTS PRONUNCIATION (vo_text only — it is read aloud by ElevenLabs):
         "- overlay_text: short punchy ON-SCREEN caption for this beat (≤6 words, front-load tension).\n"
         "  Carry the narrative like a captioned reel. Use \"\" for pure-visual beats — NOT every shot\n"
         "  needs text (aim for ~half). overlay_text may be Hinglish (brand voice); keep it tight.\n"
+        + "\n" + _PHYSICAL_REALISM_RULES + "\n"
         + character_rule
         + product_rule
         + policy +
