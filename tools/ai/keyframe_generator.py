@@ -62,6 +62,7 @@ class KeyframeGenerator:
                 "image_paths": refs, "model": self.model, "dest_path": dest_path,
                 "vertex_project_id": settings_manager.get("vertex_project_id"),
                 "vertex_location": settings_manager.get("vertex_location", "us-central1"),
+                "aspect_ratio": "9:16",
             })
         if self.provider == "wavespeed":
             from tools.ai.wavespeed_client import WaveSpeedClient

@@ -87,6 +87,7 @@ class VertexImageClient(BaseTool):
         dest_path = params["dest_path"]
         project = params.get("vertex_project_id", "")
         location = params.get("vertex_location", "us-central1")
+        aspect_ratio = params.get("aspect_ratio", "9:16")
         if not project:
             return ToolResult(success=False, error="vertex_project_id not provided")
 
@@ -102,7 +103,14 @@ class VertexImageClient(BaseTool):
 
         body = {
             "contents": [{"role": "user", "parts": parts}],
-            "generationConfig": {"responseModalities": ["TEXT", "IMAGE"]},
+            "generationConfig": {
+                "responseModalities": ["TEXT", "IMAGE"],
+                # Without this, Gemini image generation defaults toward the input reference
+                # image's own aspect ratio (often landscape for an uploaded photo) instead of
+                # the vertical 9:16 the still is meant to be — this is the actual fix, the
+                # prompt text alone ("Vertical 9:16...") isn't enough to control it.
+                "imageConfig": {"aspectRatio": aspect_ratio or "9:16"},
+            },
         }
         url = _ENDPOINT_TMPL.format(location=location, project=project, model=model)
         headers = {"Authorization": f"Bearer {token}", "Content-Type": "application/json"}
