@@ -67,6 +67,9 @@ _DEFAULTS: dict[str, Any] = {
     # Queue
     "queue_auto_run": False,
     "queue_run_interval_hours": 24,
+    # AI Reels — custom visual filter (used when "Custom" is selected in the app)
+    "custom_visual_filter_name": "Custom",
+    "custom_visual_filter_prompt": "",
     # Meme clips
     "meme_master_prompt": "",
     # Local output directory — where final mp4 files are copied after rendering

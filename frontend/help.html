@@ -71,11 +71,31 @@
     .stab.active { background: #1e1428; color: #a78bfa; font-weight: 600; }
     .stab .icon { font-size: 15px; }
 
+    /* Mobile section dropdown (replaces the sidebar under the breakpoint) */
+    .mobile-section-select { display: none; }
+
     /* Content area */
     .content {
       overflow-y: auto;
       padding: 32px 40px;
       max-width: 780px;
+    }
+
+    @media (max-width: 768px) {
+      .layout { grid-template-columns: 1fr; height: auto; }
+      .sidebar { display: none; }
+      .mobile-section-select {
+        display: block;
+        width: 100%;
+        margin: 14px 16px 0;
+        padding: 10px 12px;
+        background: #161616;
+        color: #eaeaea;
+        border: 1px solid #333;
+        border-radius: 8px;
+        font-size: 13px;
+      }
+      .content { max-width: 100%; padding: 20px 18px; }
     }
 
     .tab-panel { display: none; }
@@ -171,6 +191,23 @@
       <button class="stab" onclick="showTab('publish')"><span class="icon">📤</span> Publish &amp; Schedule</button>
       <button class="stab" onclick="showTab('output')"><span class="icon">📁</span> Download &amp; Output</button>
     </div>
+
+    <select class="mobile-section-select" id="mobile-section-select" onchange="showTab(this.value)">
+      <optgroup label="Modes">
+        <option value="reels">🎬 Reels</option>
+        <option value="stock">🎞 Stock</option>
+        <option value="ai">🤖 AI Reels</option>
+        <option value="cinematic">🎥 Cinematic</option>
+        <option value="meme">😂 Meme Clips</option>
+        <option value="audio">🎵 Audio Clips</option>
+      </optgroup>
+      <optgroup label="Workflow">
+        <option value="approve">✅ Review &amp; Approve</option>
+        <option value="models">⚙️ Models &amp; Cost</option>
+        <option value="publish">📤 Publish &amp; Schedule</option>
+        <option value="output">📁 Download &amp; Output</option>
+      </optgroup>
+    </select>
 
     <!-- Content -->
     <div class="content">
@@ -603,6 +640,8 @@
       document.querySelectorAll('.stab').forEach(b => {
         if (b.getAttribute('onclick').includes(`'${id}'`)) b.classList.add('active');
       });
+      const mobileSelect = document.getElementById('mobile-section-select');
+      if (mobileSelect) mobileSelect.value = id;
       document.querySelector('.content').scrollTop = 0;
     }
   </script>

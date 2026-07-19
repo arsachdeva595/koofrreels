@@ -5,6 +5,7 @@ Pipeline runner — new flow:
 from __future__ import annotations
 
 import json
+import logging
 import os
 import random
 import subprocess
@@ -18,6 +19,7 @@ from backend.config import MUSIC_LIBRARY_PATH, PROJECTS_DIR, SCHEMAS_DIR
 from backend.job_manager import Job, JobStatus
 from backend import settings_manager
 from backend import edit_planner
+from backend.visual_filters import resolve_visual_filter
 from lib.checkpoint import append_decision, write_artifact, write_checkpoint
 from lib.schema_validator import validate_artifact
 from tools.ai.elevenlabs_tts import ElevenLabsTTS
@@ -32,6 +34,8 @@ from tools.video.text_renderer import TextRenderer
 from tools.video.video_composer import VideoComposer
 from tools.video.video_normalizer import VideoNormalizer
 from tools.video.pexels_downloader import PexelsDownloader
+
+_log = logging.getLogger(__name__)
 
 
 def _ts() -> str:
@@ -583,7 +587,16 @@ _VOICEOVER_RULES = """VOICEOVER WRITING RULES (writing for ears, not eyes):
 - Say "you" constantly — never "people", "customers", "users"
 - Front-load the tension — lead with the interesting thing, fill in context after
 - Product/brand enters only at the resolution/payoff — never in the hook or setup
-- Read every line aloud — if it doesn't flow naturally spoken, it won't flow naturally heard"""
+- Read every line aloud — if it doesn't flow naturally spoken, it won't flow naturally heard
+
+TTS PRONUNCIATION (voiceover/vo_text only — this field is read aloud by ElevenLabs):
+- Write Hindi/Hinglish words in Devanagari script (मैं, है, नहीं, क्या, हूँ, अच्छा, यार), never
+  romanized spelling. Romanized Hindi ("mai", "hai", "kya") gets read with English letter-sounds by
+  the TTS engine and comes out wrong — hard final consonants, no nasalization, wrong stress.
+- Keep English words, numbers, and the brand name in Latin script, code-switched naturally in the
+  same sentence — e.g. "मैं हर morning यही सोचती थी" not "main har morning yehi sochti thi".
+- overlay_text (the on-screen caption) is unaffected — keep it romanized Hinglish as usual. Only
+  the spoken voiceover/vo_text needs Devanagari for correct pronunciation."""
 
 
 def _generate_storyboard(reel_brief: dict) -> dict:
@@ -598,7 +611,7 @@ def _generate_storyboard(reel_brief: dict) -> dict:
 
     api_key = os.getenv("ANTHROPIC_API_KEY", "") or settings_manager.get("anthropic_api_key", "")
     if not api_key:
-        return _default_storyboard(reel_brief, n_scenes)
+        return _default_storyboard(reel_brief, n_scenes, reason="No Anthropic API key configured")
 
     dur_per = round(target_dur / n_scenes, 1)
 
@@ -745,11 +758,11 @@ ENTIRELY through objects and scenery, with zero human presence in the generated 
         raw = raw.strip()
     try:
         data = json.loads(raw)
-    except json.JSONDecodeError:
-        return _default_storyboard(reel_brief, n_scenes)
+    except json.JSONDecodeError as exc:
+        return _default_storyboard(reel_brief, n_scenes, reason=f"Storyboard JSON was invalid: {exc}")
     scenes = data.get("scenes", [])
     if not scenes:
-        return _default_storyboard(reel_brief, n_scenes)
+        return _default_storyboard(reel_brief, n_scenes, reason="Storyboard call returned no scenes")
     # Normalize durations to sum to target
     total = sum(s.get("duration_seconds", target_dur / n_scenes) for s in scenes)
     scale = target_dur / max(total, 1)
@@ -759,11 +772,15 @@ ENTIRELY through objects and scenery, with zero human presence in the generated 
     return data
 
 
-def _default_storyboard(reel_brief: dict, n_scenes: int) -> dict:
+def _default_storyboard(reel_brief: dict, n_scenes: int, reason: str = "") -> dict:
+    """Deterministic fallback storyboard. `reason` is surfaced to the approval modal
+    and the job log so a fallback is never silently mistaken for a real script."""
+    if reason:
+        _log.warning("Storyboard fell back to the default template: %s", reason)
     target_dur = reel_brief["target_duration_seconds"]
     dur_per = round(target_dur / n_scenes, 1)
     roles = ["opening", "build-up", "peak", "build-up", "peak", "outro"]
-    return {
+    contract = {
         "theme": reel_brief.get("prompt") or "Visual story",
         "scenes": [
             {
@@ -778,9 +795,33 @@ def _default_storyboard(reel_brief: dict, n_scenes: int) -> dict:
             for i in range(n_scenes)
         ],
     }
+    if reason:
+        contract["_fallback_reason"] = reason
+    return contract
 
 
 # ── Cinematic keyframe director ────────────────────────────────────────────────
+
+# Must mirror the enums in schemas/artifacts/cinematic_storyboard.schema.json.
+_SHOT_TYPES = ["ELS", "LS", "MLS", "MS", "MCU", "CU", "ECU", "Low", "High", "Insert"]
+_CAMERA_MOVES = ["locked", "push", "pull", "pan", "track", "orbit", "gimbal"]
+_DOF_VALUES = ["shallow", "medium", "deep"]
+_TRANSITIONS = ["cut", "dissolve", "match_cut"]
+
+
+def _coerce_enum(value: str, options: list[str], default: str) -> str:
+    """Coerce a qualified/free-form value (e.g. "slow push") onto the nearest schema
+    enum option by substring match, case-insensitive. Falls back to `default` if nothing
+    matches at all, so one drifted word never fails the whole shot."""
+    v = (value or "").strip().lower()
+    for opt in options:
+        if opt.lower() == v:
+            return opt
+    for opt in options:
+        if opt.lower() in v:
+            return opt
+    return default
+
 
 def _cinematic_role_for(idx: int, total: int) -> str:
     """Map a shot index onto the 4-beat arc (setup → build → turn → payoff)."""
@@ -820,11 +861,15 @@ def _shot_to_scene(shot: dict, idx: int, total: int) -> dict:
     }
 
 
-def _default_cinematic_storyboard(reel_brief: dict, n_shots: int) -> dict:
-    """Deterministic fallback contract when Claude is unavailable or returns junk."""
+def _default_cinematic_storyboard(reel_brief: dict, n_shots: int, reason: str = "") -> dict:
+    """Deterministic fallback contract when Claude is unavailable or returns junk.
+    `reason` is surfaced to the approval modal and the job log so a fallback is never
+    silently mistaken for real director output."""
+    if reason:
+        _log.warning("Cinematic director fell back to the default template: %s", reason)
     target_dur = reel_brief["target_duration_seconds"]
     dur_per = round(target_dur / n_shots, 1)
-    style_lock = "cinematic film still, Kodak Portra 400 grain, soft directional natural light, warm grade"
+    style_lock = resolve_visual_filter(reel_brief.get("visual_filter", ""))
     shot_types = ["ELS", "MS", "CU", "ECU", "Low", "MLS", "MCU", "High", "LS", "MS", "CU", "ECU"]
     moves = ["locked", "push", "track", "locked", "pull", "pan", "locked", "orbit", "gimbal", "locked", "push", "locked"]
     shots = []
@@ -845,7 +890,7 @@ def _default_cinematic_storyboard(reel_brief: dict, n_shots: int) -> dict:
             "needs_end_frame": False,
             "end_image_prompt": None,
         })
-    return {
+    contract = {
         "version": "1.0",
         "theme": reel_brief.get("prompt") or "Cinematic sequence",
         "style_lock": style_lock,
@@ -854,6 +899,9 @@ def _default_cinematic_storyboard(reel_brief: dict, n_shots: int) -> dict:
         "shots": shots,
         "scenes": [_shot_to_scene(s, i, n_shots) for i, s in enumerate(shots)],
     }
+    if reason:
+        contract["_fallback_reason"] = reason
+    return contract
 
 
 def _generate_cinematic_storyboard(reel_brief: dict) -> dict:
@@ -879,10 +927,11 @@ def _generate_cinematic_storyboard(reel_brief: dict) -> dict:
     brand_voice = settings_manager.get_brand_voice() if use_brand else ""
     context = f"\n\nBrand voice:\n{brand_voice[:300]}" if brand_voice else ""
     dur_per = round(target_dur / n_shots, 1)
+    filter_descriptor = resolve_visual_filter(reel_brief.get("visual_filter", ""))
 
     api_key = os.getenv("ANTHROPIC_API_KEY", "") or settings_manager.get("anthropic_api_key", "")
     if not api_key:
-        return _default_cinematic_storyboard(reel_brief, n_shots)
+        return _default_cinematic_storyboard(reel_brief, n_shots, reason="No Anthropic API key configured")
 
     _product_desc = reel_brief.get("product_description", "")
     product_rule = (
@@ -901,6 +950,13 @@ CONTENT POLICY (image_prompt and video_prompt are sent to image/video models):
 - ENGLISH ONLY for image_prompt and video_prompt. vo_text may be Hinglish.
 - NEVER use age/minor words (girl, teen, child, kid, ladki, bachi, ...). Use woman, person, adult, figure.
 - Avoid violence/self-harm/sexual/hate trigger words; convey emotion through body language, light, and environment.
+
+TTS PRONUNCIATION (vo_text only — it is read aloud by ElevenLabs):
+- Write Hindi/Hinglish words in Devanagari script (मैं, है, नहीं, क्या, हूँ), never romanized
+  spelling — romanized Hindi ("mai", "hai", "kya") gets read with English letter-sounds and comes
+  out wrong (hard final consonants, no nasalization). Keep English words, numbers, and the brand
+  name in Latin script, code-switched naturally in the same line, e.g. "मैं हर morning यही सोचती थी".
+- overlay_text keeps its usual romanized Hinglish — this rule is for vo_text only.
 """
 
     system = (
@@ -913,10 +969,15 @@ CONTENT POLICY (image_prompt and video_prompt are sent to image/video models):
         "  one ECU detail (Insert/ECU), and one power angle (Low or High).\n"
         "- style_lock is authored ONCE (film stock/grain, location, wardrobe, palette, light) and is\n"
         "  appended to every prompt — it MUST NOT vary per shot. Do NOT repeat it inside image_prompt.\n"
+        f"- style_lock MUST use this look as its base: \"{filter_descriptor}\". Layer the reel's specific\n"
+        "  location/wardrobe/palette on top of it — don't replace or contradict it, extend it.\n"
         "- The SAME character/wardrobe from the reference image appears in every shot.\n"
         "- Default speaking_on_camera=false; frame narration shots as listening / breathing / observing,\n"
         "  NOT talking. Only set true with clear justification (we have no lip-sync).\n"
         "- transition_out is one of cut/dissolve/match_cut (prefer cut).\n"
+        "- shot_type, dof, and camera_move are ENUMS — output the bare value exactly as listed\n"
+        "  below (e.g. \"push\", not \"slow push\" or \"push in\"). Put pacing/speed description in\n"
+        "  video_prompt instead, where it belongs.\n"
         "- Set needs_end_frame=true only for shots with strong motion that benefit from start+end\n"
         "  keyframe interpolation; then end_image_prompt is REQUIRED, else null.\n"
         "- overlay_text: short punchy ON-SCREEN caption for this beat (≤6 words, front-load tension).\n"
@@ -961,12 +1022,14 @@ CONTENT POLICY (image_prompt and video_prompt are sent to image/video models):
                 raw = raw[4:]
             raw = raw.strip()
         data = json.loads(raw)
-    except (anthropic.APIError, json.JSONDecodeError, KeyError, IndexError):
-        return _default_cinematic_storyboard(reel_brief, n_shots)
+    except (anthropic.APIError, json.JSONDecodeError, KeyError, IndexError) as exc:
+        return _default_cinematic_storyboard(
+            reel_brief, n_shots, reason=f"Director call failed: {type(exc).__name__}: {exc}"
+        )
 
     shots = data.get("shots", [])
     if not shots:
-        return _default_cinematic_storyboard(reel_brief, n_shots)
+        return _default_cinematic_storyboard(reel_brief, n_shots, reason="Director returned no shots")
 
     # Normalize shot durations to sum to target (Veo caps each at 8s).
     total = sum(float(s.get("duration_sec", dur_per)) for s in shots)
@@ -980,6 +1043,17 @@ CONTENT POLICY (image_prompt and video_prompt are sent to image/video models):
         s.setdefault("end_image_prompt", None)
         s.setdefault("vo_text", "")
         s.setdefault("overlay_text", "")
+        # The director occasionally qualifies an enum field (e.g. "slow push" instead of
+        # "push") — coerce near-misses onto the schema enum instead of losing the whole
+        # (otherwise good) plan to a strict validation failure over one word.
+        if "camera_move" in s:
+            s["camera_move"] = _coerce_enum(s["camera_move"], _CAMERA_MOVES, "locked")
+        if "shot_type" in s:
+            s["shot_type"] = _coerce_enum(s["shot_type"], _SHOT_TYPES, "MS")
+        if "dof" in s:
+            s["dof"] = _coerce_enum(s["dof"], _DOF_VALUES, "shallow")
+        if "transition_out" in s:
+            s["transition_out"] = _coerce_enum(s["transition_out"], _TRANSITIONS, "cut")
 
     contract = {
         "version": "1.0",
@@ -994,7 +1068,9 @@ CONTENT POLICY (image_prompt and video_prompt are sent to image/video models):
     # Validate against the schema; fall back to default if the director drifted off-contract.
     errors = validate_artifact(str(SCHEMAS_DIR), "cinematic_storyboard", contract)
     if errors:
-        fallback = _default_cinematic_storyboard(reel_brief, n_shots)
+        fallback = _default_cinematic_storyboard(
+            reel_brief, n_shots, reason=f"Director output failed schema validation: {errors[:3]}"
+        )
         fallback["_validation_errors"] = errors[:8]
         return fallback
 
@@ -1134,8 +1210,11 @@ def _probe_audio_duration(path: str) -> float:
 def _generate_scene_vo_files(
     scenes: list[dict],
     voiceover_dir: Path,
+    voice_id: str | None = None,
 ) -> tuple[dict[int, str], dict[int, float]]:
-    """Generate one MP3 per scene. Returns ({scene_num: path}, {scene_num: duration_s})."""
+    """Generate one MP3 per scene. Returns ({scene_num: path}, {scene_num: duration_s}).
+    `voice_id`, when given, overrides the ELEVENLABS_VOICE_ID settings default for this
+    reel only (e.g. a preset-model's gender-paired voice)."""
     tts = ElevenLabsTTS()
     files: dict[int, str] = {}
     durations: dict[int, float] = {}
@@ -1144,7 +1223,10 @@ def _generate_scene_vo_files(
         if not text:
             continue
         out = str(voiceover_dir / f"vo_scene_{scene['scene']:02d}.mp3")
-        r = tts.execute({"text": text, "output_path": out})
+        req = {"text": text, "output_path": out}
+        if voice_id:
+            req["voice_id"] = voice_id
+        r = tts.execute(req)
         if r.success:
             files[scene["scene"]] = out
             durations[scene["scene"]] = _probe_audio_duration(out)

@@ -30,6 +30,8 @@ from backend.pipeline_runner import (
     _ts,
 )
 from backend import edit_planner
+from backend.visual_filters import DEFAULT_VISUAL_FILTER, resolve_visual_filter
+from backend.model_presets import get_preset, voice_for_preset
 from tools.base_tool import ToolResult
 from tools.ai.veo3_client import Veo3Client, VEO3_MAX_DURATION
 from tools.ai.fal_client import FalClient
@@ -222,6 +224,26 @@ def run_ai_pipeline(job: Job, params: dict[str, Any]) -> None:
         job.begin_stage("brief", "Processing Brief", "Interpreting your request...")
         job.update(progress_pct=3, status=JobStatus.RUNNING)
 
+        # Preset model (library_model_id) resolves to a real reference photo BEFORE any
+        # validation below checks character_image_path, so picking a preset satisfies the
+        # "needs a reference image" requirement exactly like an upload would. It also
+        # decides the auto-paired ElevenLabs voice (gender-mapped), unless the user has a
+        # manual voice_id set in Settings, which always wins.
+        preset = get_preset(params.get("library_model_id") or "")
+        if preset:
+            params["character_image_path"] = preset["photo"]
+        resolved_voice_id = (
+            settings_manager.get("elevenlabs_voice_id", "")
+            or params.get("voice_id")
+            or (voice_for_preset(preset) if preset else None)
+        )
+        # Stashed on the (mutable, shared-by-reference) params dict so every downstream
+        # function that already receives `params` can read it without a new parameter.
+        params["resolved_voice_id"] = resolved_voice_id
+
+        visual_filter = params.get("visual_filter") or DEFAULT_VISUAL_FILTER
+        filter_descriptor = resolve_visual_filter(visual_filter)
+
         reel_brief = {
             "version": "1.0",
             "mode": "ai_reels",
@@ -234,6 +256,7 @@ def run_ai_pipeline(job: Job, params: dict[str, Any]) -> None:
             "reel_type": params.get("reel_type", "story"),
             "framework": params.get("framework", "abt"),
             "product_image_path": params.get("product_image_path"),
+            "visual_filter": visual_filter,
         }
 
         if not settings_manager.get("vertex_project_id", ""):
@@ -304,7 +327,11 @@ def run_ai_pipeline(job: Job, params: dict[str, Any]) -> None:
             reel_brief["character_image_path"] = params.get("character_image_path")
             storyboard = _generate_cinematic_storyboard(reel_brief)
             scenes = storyboard["scenes"]
-            job.end_stage("storyboard", f"{len(scenes)}-shot cinematic plan ready — awaiting your approval")
+            _fallback = storyboard.get("_fallback_reason")
+            msg = f"{len(scenes)}-shot cinematic plan ready — awaiting your approval"
+            if _fallback:
+                msg += f" ⚠️ GENERIC FALLBACK USED — director call didn't produce a real plan ({_fallback})"
+            job.end_stage("storyboard", msg)
         elif skip_storyboard:
             job.begin_stage("storyboard", "Parsing Your Script", "Reading scene-by-scene instructions...")
             job.update(progress_pct=8)
@@ -318,7 +345,11 @@ def run_ai_pipeline(job: Job, params: dict[str, Any]) -> None:
             job.update(progress_pct=8)
             storyboard = _generate_storyboard(reel_brief)
             scenes = storyboard["scenes"]
-            job.end_stage("storyboard", f"{len(scenes)}-scene story ready — awaiting your approval")
+            _fallback = storyboard.get("_fallback_reason")
+            msg = f"{len(scenes)}-scene story ready — awaiting your approval"
+            if _fallback:
+                msg += f" ⚠️ GENERIC FALLBACK USED — director call didn't produce a real script ({_fallback})"
+            job.end_stage("storyboard", msg)
 
         # ── Pre-approval policy scan ───────────────────────────────────────────
         # Run each scene's visual fields through the sanitizer so the user can
@@ -358,6 +389,7 @@ def run_ai_pipeline(job: Job, params: dict[str, Any]) -> None:
                 "music_file": reel_brief.get("music_file") or "Random from library",
             },
             "policy_flags": policy_flags,
+            "storyboard_fallback_reason": storyboard.get("_fallback_reason"),
         }
         if is_cinematic:
             # Surface the §5 contract so the modal can render per-shot cinematography.
@@ -417,7 +449,8 @@ def run_ai_pipeline(job: Job, params: dict[str, Any]) -> None:
                             if (_reel_type == "product" and _prod) else set())
             try:
                 scene_stills = _run_standard_keyframes(
-                    job, project_dir, scenes, _reel_type, _char, _prod, _kf, _prod_scenes)
+                    job, project_dir, scenes, _reel_type, _char, _prod, _kf, _prod_scenes,
+                    filter_descriptor)
             except Exception as _exc:
                 job.update(message=f"Keyframe step skipped ({_exc}) — generating video directly")
                 scene_stills = {}
@@ -433,7 +466,8 @@ def run_ai_pipeline(job: Job, params: dict[str, Any]) -> None:
         else:
             elevenlabs_key = os.getenv("ELEVENLABS_API_KEY", "") or settings_manager.get("elevenlabs_api_key", "")
             if elevenlabs_key and any(s.get("voiceover") for s in scenes):
-                scene_vo_files, scene_vo_durations = _generate_scene_vo_files(scenes, voiceover_dir)
+                scene_vo_files, scene_vo_durations = _generate_scene_vo_files(
+                    scenes, voiceover_dir, voice_id=params.get("resolved_voice_id"))
                 if scene_vo_files:
                     job.end_stage("voiceover", f"{len(scene_vo_files)} scene voiceovers generated — clips will match VO length")
                 else:
@@ -561,6 +595,8 @@ def run_ai_pipeline(job: Job, params: dict[str, Any]) -> None:
             dialogue = scene_dialogues.get(i, "")
             if dialogue:
                 prompt = f'{prompt}. Character says: "{dialogue}"'
+            if filter_descriptor:
+                prompt = f"{prompt}. Look: {filter_descriptor}"
 
             # Smart clip length: generate only as long as this scene needs (snapped to
             # the provider's valid lengths), so a short scene isn't billed as a full clip.
@@ -1197,10 +1233,12 @@ def _keyframe_provider_ready() -> bool:
     return False
 
 
-def _standard_still_prompt(scene: dict, has_person_ref: bool, has_product_ref: bool, no_characters: bool) -> str:
+def _standard_still_prompt(scene: dict, has_person_ref: bool, has_product_ref: bool, no_characters: bool,
+                           filter_descriptor: str = "") -> str:
     base = (scene.get("visual_description", "") or "").strip()
     hint = (scene.get("clip_hint", "") or "").strip()
-    parts = [f"Vertical 9:16 cinematic film still, photorealistic. {base}"]
+    look = f" {filter_descriptor}." if filter_descriptor else ""
+    parts = [f"Vertical 9:16 cinematic film still, photorealistic.{look} {base}"]
     if hint:
         parts.append(hint)
     if has_person_ref:
@@ -1216,7 +1254,8 @@ def _standard_still_prompt(scene: dict, has_person_ref: bool, has_product_ref: b
 
 def _run_standard_keyframes(job: Job, project_dir: Path, scenes: list[dict], reel_type: str,
                             character_image_path: str | None, product_image_path: str | None,
-                            keyframe_paths: list, product_scene_nums: set) -> dict:
+                            keyframe_paths: list, product_scene_nums: set,
+                            filter_descriptor: str = "") -> dict:
     """Generate one keyframe still per scene (mode-appropriate references + prompt), run a
     continuity check for person-consistent modes, and gate on a keyframe review (reusing
     the Cinematic review UI/endpoints). Returns {scene_num: still_path} for approved stills."""
@@ -1248,7 +1287,7 @@ def _run_standard_keyframes(job: Job, project_dir: Path, scenes: list[dict], ree
         shots.append({
             "kf_id": f"KF{scene['scene']}", "scene": scene["scene"],
             "image_prompt": scene.get("visual_description", ""),
-            "full_prompt": _standard_still_prompt(scene, has_person, has_product, no_characters),
+            "full_prompt": _standard_still_prompt(scene, has_person, has_product, no_characters, filter_descriptor),
             "refs": refs,
         })
 
@@ -1367,6 +1406,7 @@ def _generate_video_clip(provider: str, *, prompt: str, dest_path: str,
         "vertex_project_id": vertex_project_id, "vertex_location": vertex_location,
         "image_path": image_path, "reference_image_paths": reference_image_paths,
         "model": veo_model, "negative_prompt": negative_prompt, "duration": duration,
+        "aspect_ratio": "9:16",
     })
 
 
@@ -1589,7 +1629,8 @@ def _run_cinematic_finish(job: Job, params: dict, project_dir: Path, project_id:
     if params.get("include_voiceover", True):
         elevenlabs_key = os.getenv("ELEVENLABS_API_KEY", "") or settings_manager.get("elevenlabs_api_key", "")
         if elevenlabs_key and any(s.get("voiceover") for s in scenes):
-            scene_vo_files, scene_vo_durations = _generate_scene_vo_files(scenes, voiceover_dir)
+            scene_vo_files, scene_vo_durations = _generate_scene_vo_files(
+                scenes, voiceover_dir, voice_id=params.get("resolved_voice_id"))
             job.end_stage("voiceover", f"{len(scene_vo_files)} shot voiceovers — clips trimmed to VO length")
         else:
             job.end_stage("voiceover", "No voiceover (no ElevenLabs key or empty narration)")
@@ -1820,7 +1861,8 @@ def _run_cinematic_plan(job: Job, params: dict, project_dir: Path, storyboard: d
 
     job.begin_stage("voiceover", "Generating Voiceover", "Recording narration to time the cuts...")
     job.update(progress_pct=6)
-    scene_vo_files, scene_vo_durations = _generate_scene_vo_files(scenes, voiceover_dir)
+    scene_vo_files, scene_vo_durations = _generate_scene_vo_files(
+        scenes, voiceover_dir, voice_id=params.get("resolved_voice_id"))
     if not scene_vo_files:
         job.end_stage("voiceover", "No voiceover produced — using structural timing")
         return None, None, 0.0

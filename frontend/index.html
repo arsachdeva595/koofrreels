@@ -834,6 +834,28 @@
     .tab:hover:not(.active) { color: var(--text2); }
     .tab.active { background: var(--purple); color: #fff; }
 
+    /* ── Mobile nav dropdown (replaces .tab-bar under the breakpoint) ─────────── */
+    .mobile-tab-select { display: none; }
+    @media (max-width: 768px) {
+      .tab-bar { display: none; }
+      .mobile-tab-select {
+        display: block;
+        flex: 1;
+        min-width: 0;
+        padding: 8px 10px;
+        background: var(--bg2);
+        color: var(--text);
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        font-size: 13px;
+        font-weight: 500;
+      }
+      /* .header-right's icon buttons don't shrink (white-space:nowrap, no min-width:0) —
+         wrap the header instead of letting them force horizontal scroll on the page. */
+      header { flex-wrap: wrap; row-gap: 8px; }
+      .header-right { margin-left: 0; flex-wrap: wrap; }
+    }
+
     /* ── Tab content panels ──────────────────────────────────────────────────── */
     .tab-content { display: none; }
     .tab-content.active { display: block; }
@@ -1010,6 +1032,13 @@
     <button class="tab" id="tab-btn-audio" onclick="switchTab('audio')">🎵 Audio Clips</button>
     <button class="tab" id="tab-btn-studio" onclick="switchTab('studio')" style="display:none">✨ Studio</button>
   </div>
+  <select class="mobile-tab-select" id="mobile-tab-select" onchange="switchTab(this.value)">
+    <option value="reels">🎬 Reels</option>
+    <option value="stock">🎞 Stock</option>
+    <option value="ai">🤖 AI Reels</option>
+    <option value="meme">😂 Meme Clips</option>
+    <option value="audio">🎵 Audio Clips</option>
+  </select>
   <div class="header-right">
     <a href="/history" class="btn-icon">🗂 History</a>
     <a href="/help" class="btn-icon">📖 Help</a>
@@ -1248,6 +1277,28 @@
       </select>
     </div>
 
+    <!-- Visual filter selector -->
+    <div class="source-block">
+      <div class="section-label">Visual filter</div>
+      <div class="source-pills">
+        <button class="source-pill active" id="ai-filter-kodak_nostalgic" onclick="switchVisualFilter('kodak_nostalgic')">📷 Kodak Nostalgic</button>
+        <button class="source-pill" id="ai-filter-ultra_realistic" onclick="switchVisualFilter('ultra_realistic')">🎯 Ultra Realistic</button>
+        <button class="source-pill" id="ai-filter-moody_cinematic" onclick="switchVisualFilter('moody_cinematic')">🎬 Moody Cinematic</button>
+        <button class="source-pill" id="ai-filter-clean_editorial" onclick="switchVisualFilter('clean_editorial')">🧼 Clean Editorial</button>
+        <button class="source-pill" id="ai-filter-pastel_dreamy" onclick="switchVisualFilter('pastel_dreamy')">🌸 Pastel Dreamy</button>
+        <button class="source-pill" id="ai-filter-cyberpunk_neon" onclick="switchVisualFilter('cyberpunk_neon')">🌆 Cyberpunk Neon</button>
+        <button class="source-pill" id="ai-filter-gritty_documentary" onclick="switchVisualFilter('gritty_documentary')">🎥 Gritty Documentary</button>
+        <button class="source-pill" id="ai-filter-macro_commercial" onclick="switchVisualFilter('macro_commercial')">🔍 Macro Commercial</button>
+        <button class="source-pill" id="ai-filter-vintage_8mm" onclick="switchVisualFilter('vintage_8mm')">📼 Vintage 8mm</button>
+        <button class="source-pill" id="ai-filter-anime_cinematic" onclick="switchVisualFilter('anime_cinematic')">🎨 Anime Cinematic</button>
+        <button class="source-pill" id="ai-filter-pixar_animation" onclick="switchVisualFilter('pixar_animation')">🧸 Pixar Animation</button>
+        <button class="source-pill" id="ai-filter-custom" onclick="switchVisualFilter('custom')">✨ Custom</button>
+      </div>
+      <div class="source-hint" id="ai-filter-custom-hint" style="display:none;margin-top:6px">
+        Edit the Custom filter's prompt in <a href="/settings" target="_blank" style="color:var(--purple-text)">Settings → Brand Voice</a>.
+      </div>
+    </div>
+
     <!-- Reel type selector -->
     <div class="source-block">
       <div class="section-label">Reel type</div>
@@ -1278,11 +1329,22 @@
       <div class="source-hint" style="margin-bottom:10px">
         This image is used as the visual anchor for every generated clip.
       </div>
-      <div id="ai-char-drop" style="border:2px dashed #444;border-radius:8px;padding:16px;text-align:center;cursor:pointer;min-height:80px;display:flex;align-items:center;justify-content:center;flex-direction:column" onclick="document.getElementById('ai-char-input').click()">
-        <span id="ai-char-drop-label" style="color:#888;font-size:13px">Click to upload character image</span>
-        <img id="ai-char-preview" style="display:none;max-height:120px;border-radius:6px;margin-top:8px" />
+      <div class="source-pills" style="margin-bottom:10px">
+        <button class="source-pill active" id="ai-char-mpill-preset" onclick="switchModelSource('char','preset')">👤 Preset Model</button>
+        <button class="source-pill" id="ai-char-mpill-upload" onclick="switchModelSource('char','upload')">⬆ Upload Photo</button>
       </div>
-      <input type="file" id="ai-char-input" accept="image/*" style="display:none" onchange="handleAICharUpload(this)" />
+      <div class="source-panel active" id="ai-char-mpanel-preset">
+        <div class="studio-model-grid" id="ai-char-preset-grid">
+          <div style="font-size:12px;color:var(--text4)">Loading models…</div>
+        </div>
+      </div>
+      <div class="source-panel" id="ai-char-mpanel-upload">
+        <div id="ai-char-drop" style="border:2px dashed #444;border-radius:8px;padding:16px;text-align:center;cursor:pointer;min-height:80px;display:flex;align-items:center;justify-content:center;flex-direction:column" onclick="document.getElementById('ai-char-input').click()">
+          <span id="ai-char-drop-label" style="color:#888;font-size:13px">Click to upload character image</span>
+          <img id="ai-char-preview" style="display:none;max-height:120px;border-radius:6px;margin-top:8px" />
+        </div>
+        <input type="file" id="ai-char-input" accept="image/*" style="display:none" onchange="handleAICharUpload(this)" />
+      </div>
     </div>
 
     <!-- No-characters: object/scenery only, no uploads -->
@@ -1313,11 +1375,22 @@
       <div style="display:flex;gap:12px;flex-wrap:wrap">
         <div style="flex:1;min-width:200px">
           <div class="section-label" style="margin-bottom:8px">🧑 Creator Image</div>
-          <div id="ai-ugc-creator-drop" style="border:2px dashed #444;border-radius:8px;padding:16px;text-align:center;cursor:pointer;min-height:80px;display:flex;align-items:center;justify-content:center;flex-direction:column" onclick="document.getElementById('ai-ugc-creator-input').click()">
-            <span id="ai-ugc-creator-drop-label" style="color:#888;font-size:13px">Click to upload creator</span>
-            <img id="ai-ugc-creator-preview" style="display:none;max-height:110px;border-radius:6px;margin-top:8px" />
+          <div class="source-pills" style="margin-bottom:10px">
+            <button class="source-pill active" id="ai-ugc-creator-mpill-preset" onclick="switchModelSource('ugc-creator','preset')">👤 Preset Model</button>
+            <button class="source-pill" id="ai-ugc-creator-mpill-upload" onclick="switchModelSource('ugc-creator','upload')">⬆ Upload Photo</button>
           </div>
-          <input type="file" id="ai-ugc-creator-input" accept="image/*" style="display:none" onchange="handleUGCCreatorUpload(this)" />
+          <div class="source-panel active" id="ai-ugc-creator-mpanel-preset">
+            <div class="studio-model-grid" id="ai-ugc-creator-preset-grid">
+              <div style="font-size:12px;color:var(--text4)">Loading models…</div>
+            </div>
+          </div>
+          <div class="source-panel" id="ai-ugc-creator-mpanel-upload">
+            <div id="ai-ugc-creator-drop" style="border:2px dashed #444;border-radius:8px;padding:16px;text-align:center;cursor:pointer;min-height:80px;display:flex;align-items:center;justify-content:center;flex-direction:column" onclick="document.getElementById('ai-ugc-creator-input').click()">
+              <span id="ai-ugc-creator-drop-label" style="color:#888;font-size:13px">Click to upload creator</span>
+              <img id="ai-ugc-creator-preview" style="display:none;max-height:110px;border-radius:6px;margin-top:8px" />
+            </div>
+            <input type="file" id="ai-ugc-creator-input" accept="image/*" style="display:none" onchange="handleUGCCreatorUpload(this)" />
+          </div>
         </div>
         <div style="flex:1;min-width:200px">
           <div class="section-label" style="margin-bottom:8px">🛍️ Product Image</div>
@@ -1336,11 +1409,22 @@
       <div class="source-hint" style="margin-bottom:10px">
         Upload <strong>one</strong> reference image of your character. A cinematographer-director shot-lists a 10–20s sequence (shot type, lens, depth of field, camera move, cuts) and the system <strong>generates its own keyframe stills</strong> — you don't upload them. Best at shorter durations.
       </div>
-      <div id="ai-cine-drop" style="border:2px dashed #444;border-radius:8px;padding:16px;text-align:center;cursor:pointer;min-height:80px;display:flex;align-items:center;justify-content:center;flex-direction:column" onclick="document.getElementById('ai-cine-input').click()">
-        <span id="ai-cine-drop-label" style="color:#888;font-size:13px">Click to upload character image</span>
-        <img id="ai-cine-preview" style="display:none;max-height:120px;border-radius:6px;margin-top:8px" />
+      <div class="source-pills" style="margin-bottom:10px">
+        <button class="source-pill active" id="ai-cine-mpill-preset" onclick="switchModelSource('cine','preset')">👤 Preset Model</button>
+        <button class="source-pill" id="ai-cine-mpill-upload" onclick="switchModelSource('cine','upload')">⬆ Upload Photo</button>
       </div>
-      <input type="file" id="ai-cine-input" accept="image/*" style="display:none" onchange="handleAICineUpload(this)" />
+      <div class="source-panel active" id="ai-cine-mpanel-preset">
+        <div class="studio-model-grid" id="ai-cine-preset-grid">
+          <div style="font-size:12px;color:var(--text4)">Loading models…</div>
+        </div>
+      </div>
+      <div class="source-panel" id="ai-cine-mpanel-upload">
+        <div id="ai-cine-drop" style="border:2px dashed #444;border-radius:8px;padding:16px;text-align:center;cursor:pointer;min-height:80px;display:flex;align-items:center;justify-content:center;flex-direction:column" onclick="document.getElementById('ai-cine-input').click()">
+          <span id="ai-cine-drop-label" style="color:#888;font-size:13px">Click to upload character image</span>
+          <img id="ai-cine-preview" style="display:none;max-height:120px;border-radius:6px;margin-top:8px" />
+        </div>
+        <input type="file" id="ai-cine-input" accept="image/*" style="display:none" onchange="handleAICineUpload(this)" />
+      </div>
 
       <div class="toggle-row" style="margin-top:12px">
         <span class="toggle-label" style="display:flex;flex-direction:column;gap:2px">
@@ -2099,6 +2183,8 @@
       document.getElementById('tab-' + t).classList.toggle('active', t === tab);
       document.getElementById('tab-btn-' + t).classList.toggle('active', t === tab);
     });
+    const mobileSelect = document.getElementById('mobile-tab-select');
+    if (mobileSelect) mobileSelect.value = tab;
     hideResult();
     hideAllErrors();
   }
@@ -2520,6 +2606,13 @@
     // Scenes & Script tab — one editable card per scene
     const isCinematic = !!data.cinematic;
     const sceneList = document.getElementById('approval-scene-list');
+    // Director call failed/returned junk and we're showing the generic fallback template —
+    // make this loud, since the placeholder content otherwise looks like a real (bad) script.
+    const fallbackBanner = data.storyboard_fallback_reason ? `
+      <div style="border:1px solid #4a1a1a;border-radius:8px;padding:10px 12px;margin-bottom:10px;background:#241010">
+        <div style="font-size:11px;font-weight:700;color:#f87171;margin-bottom:4px">⚠️ Generic fallback used — this is NOT AI-written content</div>
+        <div style="font-size:12px;color:#e0a0a0;line-height:1.5">The script/shot-plan call failed, so every scene below is a placeholder template. Reason: ${esc(data.storyboard_fallback_reason)}. You can approve anyway and edit each scene manually, or cancel and try again.</div>
+      </div>` : '';
     // Cinematic: show the single global style_lock that anchors every shot.
     const styleLockBanner = (isCinematic && data.style_lock) ? `
       <div style="border:1px solid #2a2440;border-radius:8px;padding:10px 12px;margin-bottom:10px;background:#15131f">
@@ -2529,7 +2622,7 @@
     if (!scenes.length) {
       sceneList.innerHTML = '<p style="font-size:12px;color:var(--text4);padding:10px 0">No scene data generated.</p>';
     } else {
-      sceneList.innerHTML = styleLockBanner + scenes.map(s => {
+      sceneList.innerHTML = fallbackBanner + styleLockBanner + scenes.map(s => {
         // Cinematography badges (Cinematic type only) — shot type / lens / DOF / move / cut.
         const cineBadges = isCinematic ? [
           s.kf_id ? `🎞 ${esc(s.kf_id)}` : '',
@@ -3197,12 +3290,74 @@
   let aiKeyframePaths = [];
   let aiCharImagePath = null;
   let aiProductImagePath = null;
+  let aiVisualFilter = 'kodak_nostalgic';
+  let aiLibraryModelId = null;
+  let aiModelPresets = [];
 
   function switchAIReelType(type) {
     aiReelType = type;
     ['story', 'character', 'none', 'product', 'ugc', 'cinematic'].forEach(t => {
       document.getElementById('ai-rpill-' + t).classList.toggle('active', t === type);
       document.getElementById('ai-panel-' + t).style.display = t === type ? '' : 'none';
+    });
+  }
+
+  function switchVisualFilter(filterId) {
+    aiVisualFilter = filterId;
+    ['kodak_nostalgic', 'ultra_realistic', 'moody_cinematic', 'clean_editorial', 'pastel_dreamy',
+     'cyberpunk_neon', 'gritty_documentary', 'macro_commercial', 'vintage_8mm', 'anime_cinematic',
+     'pixar_animation', 'custom'].forEach(f => {
+      document.getElementById('ai-filter-' + f).classList.toggle('active', f === filterId);
+    });
+    document.getElementById('ai-filter-custom-hint').style.display = filterId === 'custom' ? '' : 'none';
+  }
+
+  // ── AI Reels: preset model picker (Character / UGC creator / Cinematic) ────
+  // All three panels share one `aiLibraryModelId` — only one reel type is visible/active
+  // at a time, same pattern as the shared `aiCharImagePath` var those panels already use.
+  async function loadAIModelPresets() {
+    if (aiModelPresets.length) return aiModelPresets;
+    try {
+      const r = await fetch(`${API}/api/ai/model-presets`);
+      const data = await r.json();
+      aiModelPresets = data.presets || [];
+    } catch (e) { aiModelPresets = []; }
+    return aiModelPresets;
+  }
+
+  function renderModelPresetGrid(context) {
+    const grid = document.getElementById(`ai-${context}-preset-grid`);
+    if (!grid) return;
+    if (!aiModelPresets.length) {
+      grid.innerHTML = '<div style="font-size:12px;color:var(--text4)">No preset models configured yet — use Upload Photo.</div>';
+      return;
+    }
+    grid.innerHTML = aiModelPresets.map(p => `
+      <div class="studio-model-card${aiLibraryModelId === p.id ? ' selected' : ''}" onclick="selectModelPreset('${context}','${p.id}')" data-preset="${p.id}">
+        <img src="${p.thumbnail_url}" style="width:100%;aspect-ratio:3/4;object-fit:cover;border-radius:6px;margin-bottom:6px" onerror="this.style.display='none'" />
+        <div class="studio-model-name">${esc(p.name)}</div>
+      </div>`).join('');
+  }
+
+  function switchModelSource(context, source) {
+    ['preset', 'upload'].forEach(s => {
+      document.getElementById(`ai-${context}-mpill-${s}`).classList.toggle('active', s === source);
+      document.getElementById(`ai-${context}-mpanel-${s}`).classList.toggle('active', s === source);
+    });
+    if (source === 'preset') {
+      loadAIModelPresets().then(() => renderModelPresetGrid(context));
+    } else {
+      // Switching to manual upload clears any preset pick so the two stay mutually exclusive.
+      aiLibraryModelId = null;
+      document.querySelectorAll(`#ai-${context}-preset-grid .studio-model-card`).forEach(c => c.classList.remove('selected'));
+    }
+  }
+
+  function selectModelPreset(context, presetId) {
+    aiLibraryModelId = presetId;
+    aiCharImagePath = null; // preset resolves server-side — an uploaded path would take precedence otherwise
+    document.querySelectorAll(`#ai-${context}-preset-grid .studio-model-card`).forEach(c => {
+      c.classList.toggle('selected', c.dataset.preset === presetId);
     });
   }
 
@@ -3391,7 +3546,9 @@
       text_hints: aiPrompt || null,
       reel_type: aiReelType,
       framework: document.getElementById('ai-framework').value,
+      visual_filter: aiVisualFilter,
       character_image_path: (aiReelType === 'character' || aiReelType === 'ugc' || aiReelType === 'cinematic') ? aiCharImagePath : null,
+      library_model_id: (aiReelType === 'character' || aiReelType === 'ugc' || aiReelType === 'cinematic') ? aiLibraryModelId : null,
       product_image_path: (aiReelType === 'product' || aiReelType === 'ugc'
         || (aiReelType === 'cinematic' && document.getElementById('ai-cine-include-product').checked)) ? aiProductImagePath : null,
       keyframe_paths: aiReelType === 'story' && aiKeyframePaths.length ? aiKeyframePaths : null,
@@ -3746,6 +3903,9 @@
   loadStudioModels();
   updateStudioPromptPreviews();
   updateAIKeyframeSlots();
+  loadAIModelPresets().then(() => {
+    ['char', 'ugc-creator', 'cine'].forEach(renderModelPresetGrid);
+  });
 </script>
 </body>
 </html>

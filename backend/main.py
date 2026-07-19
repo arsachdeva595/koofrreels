@@ -33,6 +33,7 @@ from backend.studio_runner import run_studio_pipeline
 from backend.ai_runner import run_ai_pipeline, regenerate_cinematic_keyframe
 from starlette.concurrency import run_in_threadpool
 from backend.studio_constants import MODEL_LIBRARY
+from backend.model_presets import MODEL_PRESETS
 from backend import settings_manager, queue_manager
 from tools.koofr.koofr_browser import KoofrBrowser
 from tools.publer.publer_client import PublerClient
@@ -587,6 +588,9 @@ class AIGenerateRequest(BaseModel):
     skip_storyboard: bool = False                 # use prompt as raw scene script, skip Claude
     skip_edit_planner: bool = False               # use clips as-is, skip cut planning
     framework: str = "abt"                        # script framework: abt|pas|aida|hvc|hpsp
+    visual_filter: str = "kodak_nostalgic"        # see backend/visual_filters.py
+    library_model_id: str | None = None           # preset model id — see backend/model_presets.py
+    voice_id: str | None = None                   # explicit ElevenLabs voice override for this reel
 
 
 @app.post("/ai/generate")
@@ -742,6 +746,18 @@ async def upload_studio_image(file: UploadFile = File(...)):
 @app.get("/api/studio/models")
 async def studio_models():
     return {"models": MODEL_LIBRARY}
+
+
+@app.get("/api/ai/model-presets")
+async def ai_model_presets():
+    # `photo` (used server-side as character_image_path) lives under frontend/, which is
+    # mounted at /static — derive the browser-facing thumbnail URL from it here so
+    # model_presets.py stays free of web-serving concerns.
+    presets = [
+        {**p, "thumbnail_url": "/static/" + p["photo"].removeprefix("frontend/")}
+        for p in MODEL_PRESETS
+    ]
+    return {"presets": presets}
 
 
 @app.post("/studio/{job_id}/approve")

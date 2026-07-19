@@ -75,6 +75,25 @@
       max-width: 720px;
     }
 
+    /* Mobile section dropdown (replaces the sidebar under the breakpoint) */
+    .mobile-section-select { display: none; }
+    @media (max-width: 768px) {
+      .layout { grid-template-columns: 1fr; height: auto; }
+      .sidebar { display: none; }
+      .mobile-section-select {
+        display: block;
+        width: 100%;
+        margin: 14px 16px 0;
+        padding: 10px 12px;
+        background: #161616;
+        color: #eaeaea;
+        border: 1px solid #333;
+        border-radius: 8px;
+        font-size: 13px;
+      }
+      .content { max-width: 100%; padding: 20px 18px; }
+    }
+
     .tab-panel { display: none; }
     .tab-panel.active { display: block; }
 
@@ -361,6 +380,15 @@
       <button class="stab" onclick="showTab('publer')"><span class="icon">📤</span> Publer</button>
       <button class="stab" onclick="showTab('queue')"><span class="icon">📋</span> Queue</button>
     </div>
+
+    <select class="mobile-section-select" id="mobile-section-select" onchange="showTab(this.value)">
+      <option value="api-keys">🔑 API Keys</option>
+      <option value="koofr">☁ Koofr</option>
+      <option value="output">📁 Output</option>
+      <option value="brand-voice">🎨 Brand Voice</option>
+      <option value="publer">📤 Publer</option>
+      <option value="queue">📋 Queue</option>
+    </select>
 
     <!-- Content -->
     <div class="content">
@@ -688,6 +716,20 @@ Short. 1-2 lines max. Example:
         </div>
 
         <button class="btn-save" onclick="saveBrandVoice()">Save Brand Voice</button>
+
+        <h2 style="margin-top:36px">Custom Visual Filter</h2>
+        <p class="section-desc">AI Reels ships with 5 built-in visual filters (Kodak Nostalgic, Ultra Realistic, Moody Cinematic, Clean Editorial, Pastel Dreamy). Selecting <strong>Custom</strong> on the AI Reels form uses the prompt you write here instead — describe the look (film stock/grain, color grade, lighting) you want; this is appended to every still/clip prompt, it never renders as visible text.</p>
+
+        <div class="field">
+          <label>Custom Filter Name</label>
+          <input type="text" id="custom_visual_filter_name" placeholder="Custom" />
+        </div>
+        <div class="field">
+          <label>Custom Filter Prompt</label>
+          <textarea id="custom_visual_filter_prompt" rows="4" placeholder="e.g. high-contrast black and white, deep shadows, grainy 35mm, dramatic film noir lighting"></textarea>
+        </div>
+
+        <button class="btn-save" onclick="saveCustomVisualFilter()">Save Custom Filter</button>
       </div>
 
       <!-- ── Publer ─────────────────────────────────────────────────────────── -->
@@ -850,6 +892,8 @@ Short. 1-2 lines max. Example:
       document.querySelectorAll('.stab').forEach(b => {
         if (b.getAttribute('onclick').includes(`'${id}'`)) b.classList.add('active');
       });
+      const mobileSelect = document.getElementById('mobile-section-select');
+      if (mobileSelect) mobileSelect.value = id;
       if (id === 'queue') loadQueue();
       if (id === 'publer' && publerAccounts.length === 0) { /* wait for user to click fetch */ }
     }
@@ -908,6 +952,8 @@ Short. 1-2 lines max. Example:
 
         // Brand voice
         setVal('brand_voice', settings.brand_voice);
+        setVal('custom_visual_filter_name', settings.custom_visual_filter_name || 'Custom');
+        setVal('custom_visual_filter_prompt', settings.custom_visual_filter_prompt || '');
 
         // Publer
         setCheck('publer_enabled', settings.publer_enabled);
@@ -1045,6 +1091,14 @@ Short. 1-2 lines max. Example:
       await saveSettings({
         brand_voice: document.getElementById('brand_voice').value,
       }, 'Brand voice saved!');
+    }
+
+    // ── Save Custom Visual Filter ───────────────────────────────────────────────
+    async function saveCustomVisualFilter() {
+      await saveSettings({
+        custom_visual_filter_name: document.getElementById('custom_visual_filter_name').value,
+        custom_visual_filter_prompt: document.getElementById('custom_visual_filter_prompt').value,
+      }, 'Custom filter saved!');
     }
 
     // ── Save Publer settings ────────────────────────────────────────────────────

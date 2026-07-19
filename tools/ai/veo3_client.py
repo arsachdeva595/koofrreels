@@ -136,6 +136,7 @@ class Veo3Client(BaseTool):
         reference_image_paths: list[str] | None = None,
         model: str = VEO3_MODEL,
         duration_seconds: int | None = None,
+        aspect_ratio: str = "9:16",
     ) -> tuple[str | None, str | None]:
         """POST to Veo3 predictLongRunning. Returns (operation_name, error)."""
         url = _ENDPOINT_TMPL.format(location=location, project=project_id, model=model, verb="predictLongRunning")
@@ -155,7 +156,7 @@ class Veo3Client(BaseTool):
                 "bytesBase64Encoded": base64.b64encode(Path(image_path).read_bytes()).decode(),
                 "mimeType": mime,
             }
-        parameters: dict = {"sampleCount": 1}
+        parameters: dict = {"sampleCount": 1, "aspectRatio": aspect_ratio or "9:16"}
         if negative_prompt:
             parameters["negativePrompt"] = negative_prompt
         if duration_seconds:
@@ -259,6 +260,7 @@ class Veo3Client(BaseTool):
         negative_prompt = params.get("negative_prompt", "")
         reference_image_paths = params.get("reference_image_paths") or None
         duration_seconds = params.get("duration") or params.get("duration_seconds")
+        aspect_ratio = params.get("aspect_ratio", "9:16")
         # Reference images require the reference-capable model; otherwise use the default.
         model = params.get("model") or (VEO3_REFERENCE_MODEL if reference_image_paths else VEO3_MODEL)
 
@@ -277,7 +279,7 @@ class Veo3Client(BaseTool):
         op_name, err = self._submit_generation(
             project_id, location, prompt, token, image_path, negative_prompt,
             reference_image_paths=reference_image_paths, model=model,
-            duration_seconds=duration_seconds,
+            duration_seconds=duration_seconds, aspect_ratio=aspect_ratio,
         )
         if err:
             return ToolResult(success=False, error=err)

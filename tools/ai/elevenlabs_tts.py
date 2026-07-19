@@ -5,6 +5,7 @@ from pathlib import Path
 
 import httpx
 
+from tools.ai.hinglish_pronunciation import apply_pronunciation_fixes
 from tools.base_tool import (
     BaseTool,
     Determinism,
@@ -48,6 +49,7 @@ class ElevenLabsTTS(BaseTool):
         text = params["text"].strip()
         if not text:
             return ToolResult(success=False, error="No text provided for TTS")
+        text = apply_pronunciation_fixes(text)
 
         voice_id = params.get("voice_id") or os.getenv("ELEVENLABS_VOICE_ID", self.DEFAULT_VOICE)
         model_id = params.get("model_id", "eleven_multilingual_v2")
