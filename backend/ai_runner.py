@@ -603,10 +603,6 @@ def run_ai_pipeline(job: Job, params: dict[str, Any]) -> None:
                 prompt = f"{prompt}. Look: {filter_descriptor}"
             prompt = f"{prompt}. {POSITIVE_REALISM_TAG}."
 
-            # Smart clip length: generate only as long as this scene needs (snapped to
-            # the provider's valid lengths), so a short scene isn't billed as a full clip.
-            _dur_src = float(unit.get("target_dur") or scene.get("duration_seconds", 5))
-            duration = _snap_clip_duration(ai_provider, _dur_src)
             dest_path = str(clips_dir / f"clip_{order:03d}_veo3.mp4")
 
             image_path = None
@@ -629,6 +625,18 @@ def run_ai_pipeline(job: Job, params: dict[str, Any]) -> None:
                 # Product mode: anchor the product only on the scenes the storyboard
                 # flagged as showcase ("hero") scenes — others stay pure text-to-video.
                 image_path = product_image_path
+
+            # Smart clip length: generate only as long as this scene needs (snapped to
+            # the provider's valid lengths), so a short scene isn't billed as a full clip.
+            # EXCEPTION: Veo3's referenceImages ("asset") mode — used above when UGC sends
+            # creator+product together without an approved keyframe still — only ever
+            # returns 8s clips; requesting 4/6 is silently not honoured (or the call fails
+            # outright), per Google's own docs on asset-image video generation.
+            _dur_src = float(unit.get("target_dur") or scene.get("duration_seconds", 5))
+            if reference_image_paths and ai_provider == "veo3":
+                duration = 8
+            else:
+                duration = _snap_clip_duration(ai_provider, _dur_src)
 
             neg_prompt = (
                 f"{_VEO3_NO_SPEECH}, {ANATOMY_ARTIFACT_NEGATIVE}" if vo_on else ANATOMY_ARTIFACT_NEGATIVE
