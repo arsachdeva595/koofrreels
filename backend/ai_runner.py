@@ -1077,6 +1077,20 @@ def run_ai_pipeline(job: Job, params: dict[str, Any]) -> None:
 
         file_size = Path(final_path).stat().st_size if Path(final_path).exists() else 0
         local_copy_path = _copy_to_local_output(project_dir, project_id)
+
+        # Post-generation review payload (Script/Keyframes/Final Output/Cost popup) — same
+        # shape the Cinematic finish paths build, so the frontend renders it identically
+        # regardless of reel type.
+        review = {
+            "cost": _estimate_standard_cost(
+                ai_provider, n_stills=len(scene_stills),
+                n_continuity=len(scene_stills) if reel_type in ("character", "ugc") else 0,
+                total_clip_seconds=sum(c["duration_seconds"] for c in clip_entries),
+                n_clips=len(clip_entries), n_vo=len(scene_vo_files),
+            ),
+            "keyframes": _review_keyframes(job),
+        }
+
         job.end_stage("deliver", "Done")
         job.update(
             status=JobStatus.COMPLETED,
@@ -1084,13 +1098,17 @@ def run_ai_pipeline(job: Job, params: dict[str, Any]) -> None:
             message="AI reel ready!" + (f" Saved to {local_copy_path}" if local_copy_path else ""),
             result={
                 "project_id": project_id,
+                "reel_type": reel_type,
                 "output_path": final_path,
                 "local_copy_path": local_copy_path,
                 "duration_seconds": actual_dur,
                 "file_size_bytes": file_size,
                 "clips_used": len(clip_entries),
+                "provider": ai_provider,
                 "voiceover": voiceover_path is not None,
                 "source": "veo3",
+                "estimated_cost": review["cost"]["total"],
+                "review": review,
                 "scenes": [
                     {"scene": s["scene"], "overlay_text": s.get("overlay_text", ""),
                      "voiceover": s.get("voiceover", "")}
@@ -1711,6 +1729,55 @@ def _estimate_cinematic_cost(provider: str, n_stills: int, n_sheet: int, n_end: 
     }
 
 
+def _estimate_standard_cost(provider: str, n_stills: int, n_continuity: int,
+                            total_clip_seconds: float, n_clips: int, n_vo: int) -> dict:
+    """Post-generation cost estimate for standard (non-Cinematic) AI reel types, using
+    actual generated-item counts — reuses _CINEMATIC_PRICES' per-unit rates, but prices
+    clips from the real total billed seconds (each clip's length varies via smart-length
+    snapping) instead of assuming a fixed per-clip duration like the Cinematic estimate."""
+    p = _CINEMATIC_PRICES
+    clip_rate = p["clip_per_sec"].get(provider, 0.098)
+    clip_cost = round(clip_rate * total_clip_seconds, 3)
+    rows = [
+        {"stage": "Director (Claude)", "units": 1, "unit_cost": round(p["director_call"], 3),
+         "subtotal": round(p["director_call"], 3)},
+        {"stage": "Keyframe stills", "units": n_stills, "unit_cost": round(p["keyframe_image"], 3),
+         "subtotal": round(n_stills * p["keyframe_image"], 3)},
+        {"stage": "Continuity checks (Claude vision)", "units": n_continuity,
+         "unit_cost": round(p["continuity_check"], 3), "subtotal": round(n_continuity * p["continuity_check"], 3)},
+        {"stage": f"Clips ({provider}, {total_clip_seconds:.0f}s total)", "units": n_clips,
+         "unit_cost": round(clip_cost / n_clips, 3) if n_clips else 0.0, "subtotal": clip_cost},
+        {"stage": "Voiceover (ElevenLabs)", "units": n_vo, "unit_cost": round(p["vo_line"], 3),
+         "subtotal": round(n_vo * p["vo_line"], 3)},
+    ]
+    return {
+        "currency": "USD",
+        "note": ("Estimate from actual generated items. Video bills per second, so most spend is "
+                 "in the clips row. Tune rates in ai_runner._CINEMATIC_PRICES."),
+        "rows": rows,
+        "total": round(sum(r["subtotal"] for r in rows), 2),
+    }
+
+
+def _review_keyframes(job: Job) -> list[dict]:
+    """Per-shot {scene, kf_id, filename} list for the finished-reel review popup's
+    Keyframes tab, sourced from job.cinematic_ctx (stashed by both the standard and
+    Cinematic keyframe-generation paths with identical kf_id/filename conventions).
+    Returns [] when this reel never went through a keyframe-first flow (skip_storyboard,
+    no image provider configured, or keyframe generation failed) — the tab shows an
+    empty state in that case rather than broken images."""
+    ctx = getattr(job, "cinematic_ctx", None)
+    if not ctx:
+        return []
+    out = []
+    for s in ctx.get("shots", []):
+        kf_id = s.get("kf_id")
+        if not kf_id:
+            continue
+        out.append({"scene": s.get("scene"), "kf_id": kf_id, "filename": f"{kf_id}.png"})
+    return out
+
+
 def _preview_ai_cost(reel_type: str, scenes: list[dict], is_cinematic: bool,
                      use_keyframes: bool, include_vo: bool) -> dict:
     """Pre-generation cost estimate shown at the script-approval gate so you approve the
@@ -1927,6 +1994,7 @@ def _run_cinematic_finish(job: Job, params: dict, project_dir: Path, project_id:
     review = {
         "cost": _estimate_cinematic_cost(provider, n_stills, n_sheet, n_end, n_continuity, n_clips, n_vo),
         "inputs": _capture_cinematic_inputs(storyboard, provider, kf_endpoint, clip_model or ""),
+        "keyframes": _review_keyframes(job),
     }
     (project_dir / "cost_log.json").write_text(json.dumps(review["cost"], indent=2))
     (project_dir / "cinematic_inputs.json").write_text(json.dumps(review["inputs"], indent=2))
@@ -2387,6 +2455,7 @@ def _run_cinematic_finish_planned(job: Job, params: dict, project_dir: Path, pro
     review = {
         "cost": _estimate_cinematic_cost(provider, n_stills + n_cont, n_sheet, 0, n_continuity, n_clips, n_vo),
         "inputs": _capture_cinematic_inputs(storyboard, provider, kf_endpoint, clip_model or ""),
+        "keyframes": _review_keyframes(job),
     }
     (project_dir / "cost_log.json").write_text(json.dumps(review["cost"], indent=2))
     (project_dir / "cinematic_inputs.json").write_text(json.dumps(review["inputs"], indent=2))

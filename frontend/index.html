@@ -2077,7 +2077,7 @@
         <div class="result-meta" id="result-meta"></div>
         <div class="result-actions">
           <a class="btn-download" id="btn-download" href="#" download="reel.mp4">↓ Download MP4</a>
-          <button class="btn-review" id="btn-review" onclick="openReviewModal()" style="display:none">📋 Review inputs &amp; cost</button>
+          <button class="btn-review" id="btn-review" onclick="openReviewModal()" style="display:none">📋 Review Reel</button>
           <button class="btn-publer" id="btn-publer" onclick="openPublerModal()">📤 Push to Publer</button>
         </div>
       </div>
@@ -2141,16 +2141,20 @@
 <div class="modal-overlay" id="review-modal">
   <div class="modal modal-approval">
     <div class="modal-head">
-      <h3>📋 Inputs &amp; Cost</h3>
-      <p>Exactly what was approved and what each AI model received, plus the estimated spend.</p>
+      <h3>📋 Review Reel</h3>
+      <p>What script was approved, what keyframes were approved, the final output, and the estimated spend — one stop.</p>
       <div class="approval-tabs">
-        <button class="atab active" onclick="switchReviewTab('cost', this)">Cost</button>
-        <button class="atab" onclick="switchReviewTab('inputs', this)">Inputs &amp; Prompts</button>
+        <button class="atab active" onclick="switchReviewTab('script', this)">Script</button>
+        <button class="atab" onclick="switchReviewTab('keyframes', this)">Keyframes</button>
+        <button class="atab" onclick="switchReviewTab('output', this)">Final Output</button>
+        <button class="atab" onclick="switchReviewTab('cost', this)">Cost</button>
       </div>
     </div>
     <div class="approval-scroll">
-      <div class="atab-panel active" id="rtab-cost"><div id="review-cost"></div></div>
-      <div class="atab-panel" id="rtab-inputs"><div id="review-inputs"></div></div>
+      <div class="atab-panel active" id="rtab-script"><div id="review-script"></div></div>
+      <div class="atab-panel" id="rtab-keyframes"><div id="review-keyframes"></div></div>
+      <div class="atab-panel" id="rtab-output"><div id="review-output"></div></div>
+      <div class="atab-panel" id="rtab-cost"><div id="review-cost"></div></div>
     </div>
     <div class="modal-actions">
       <button class="btn-modal-cancel" onclick="document.getElementById('review-modal').classList.remove('open')">Close</button>
@@ -2956,8 +2960,11 @@
     document.getElementById('btn-download').href = `${API}/reel/download/${jobId}`;
     document.getElementById('btn-publer').classList.toggle('show', publerEnabled);
 
-    // Cinematic "Review inputs & cost" — store the review payload, toggle the button.
+    // "Review Reel" popup — store the full result + which job it belongs to (not
+    // currentJobId, which could move on to a new job before this gets opened).
     window.lastReview = res.review || null;
+    window.lastResult = res;
+    window.lastReviewJobId = jobId;
     const reviewBtn = document.getElementById('btn-review');
     if (reviewBtn) reviewBtn.style.display = res.review ? 'flex' : 'none';
 
@@ -2983,7 +2990,56 @@
 
   function openReviewModal() {
     const r = window.lastReview;
-    if (!r) return;
+    const res = window.lastResult;
+    const jobId = window.lastReviewJobId;
+    if (!r || !res || !jobId) return;
+
+    // Script tab — the approved on-screen text + voiceover, per scene.
+    const scenes = res.scenes || [];
+    document.getElementById('review-script').innerHTML = scenes.length ? scenes.map(s => `
+      <div style="border:1px solid var(--border);border-radius:8px;padding:10px;margin-bottom:8px">
+        <div style="font-weight:700;font-size:12px;margin-bottom:6px">Scene ${s.scene}</div>
+        ${s.overlay_text ? `<div style="font-size:12px;color:var(--text2);margin-bottom:4px"><b>On-screen:</b> ${esc(s.overlay_text)}</div>` : ''}
+        ${s.voiceover ? `<div style="font-size:12px;color:var(--text2)"><b>Voiceover:</b> ${esc(s.voiceover)}</div>` : ''}
+        ${!s.overlay_text && !s.voiceover ? '<div style="font-size:12px;color:var(--text4)">(no text or voiceover for this scene)</div>' : ''}
+      </div>`).join('') : '<p style="font-size:12px;color:var(--text4)">No script data for this reel.</p>';
+
+    // Keyframes tab — thumbnail per approved still; fold in the per-shot prompt detail
+    // (Cinematic only, via review.inputs) as expandable text under each thumbnail.
+    const kfs = r.keyframes || [];
+    const shotsByKfId = {};
+    ((r.inputs || {}).shots || []).forEach(s => { shotsByKfId[s.kf_id] = s; });
+    document.getElementById('review-keyframes').innerHTML = kfs.length ? `
+      <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(110px,1fr));gap:10px">
+        ${kfs.map(k => {
+          const shot = shotsByKfId[k.kf_id];
+          const detail = shot ? `
+            <details style="margin-top:6px">
+              <summary style="font-size:10px;color:var(--text4);cursor:pointer">prompt detail</summary>
+              <div style="font-size:10px;color:var(--text3);line-height:1.5;margin-top:4px">
+                ${shot.shot_type ? `<div>${esc(shot.shot_type)} · ${shot.lens_mm}mm · ${esc(shot.dof || '')} · ${esc(shot.camera_move || '')}</div>` : ''}
+                <div style="margin-top:2px"><b>Still →</b> ${esc(shot.still_prompt_sent || shot.image_prompt || '')}</div>
+                ${shot.clip_prompt_sent ? `<div style="margin-top:2px"><b>Clip →</b> ${esc(shot.clip_prompt_sent)}</div>` : ''}
+              </div>
+            </details>` : '';
+          return `<div style="border:1px solid var(--border);border-radius:8px;padding:6px">
+            <img src="${API}/api/ai/keyframe/${jobId}/${k.filename}" style="width:100%;aspect-ratio:9/16;object-fit:cover;border-radius:6px;background:#111" onerror="this.style.display='none'" />
+            <div style="font-size:11px;color:var(--text3);margin-top:6px">Scene ${k.scene}</div>
+            ${detail}
+          </div>`;
+        }).join('')}
+      </div>` : '<p style="font-size:12px;color:var(--text4)">No keyframe stills for this reel (skip-storyboard, no image provider configured, or the keyframe step didn\'t run).</p>';
+
+    // Final Output tab — the actual rendered video, embedded.
+    document.getElementById('review-output').innerHTML = `
+      <video controls style="width:100%;max-height:480px;border-radius:8px;background:#000" src="${API}/reel/download/${jobId}"></video>
+      <div style="font-size:12px;color:var(--text3);margin-top:10px">
+        <strong>Duration:</strong> ${(res.duration_seconds || 0).toFixed(1)}s &nbsp;
+        <strong>Size:</strong> ${((res.file_size_bytes || 0) / 1024 / 1024).toFixed(1)} MB &nbsp;
+        <strong>Clips:</strong> ${res.clips_used || 0}
+      </div>`;
+
+    // Cost tab.
     const c = r.cost || {}, rows = c.rows || [];
     document.getElementById('review-cost').innerHTML = `
       <table style="width:100%;border-collapse:collapse;font-size:12px">
@@ -3001,22 +3057,7 @@
       </table>
       <p style="font-size:11px;color:var(--text4);margin-top:8px">${esc(c.note || '')}</p>`;
 
-    const inp = r.inputs || {}, shots = inp.shots || [], models = inp.models || {};
-    document.getElementById('review-inputs').innerHTML = `
-      <div style="border:1px solid #2a2440;border-radius:8px;padding:10px;margin-bottom:10px;background:#15131f">
-        <div style="font-size:10px;font-weight:700;text-transform:uppercase;color:var(--purple-text);margin-bottom:4px">🎬 Style lock (applied to every shot)</div>
-        <div style="font-size:12px;color:var(--text3);line-height:1.5">${esc(inp.style_lock || '')}</div>
-        <div style="font-size:11px;color:var(--text4);margin-top:8px">provider: ${esc(inp.provider || '')} · director: ${esc(models.director || '')} · keyframe: ${esc(models.keyframe || '')} · clip: ${esc(models.clip || '')}</div>
-      </div>` +
-      shots.map(s => `<div style="border:1px solid var(--border);border-radius:8px;padding:10px;margin-bottom:8px">
-        <div style="font-weight:700;font-size:12px;margin-bottom:4px">${esc(s.kf_id)} · ${esc(s.shot_type)} ${s.lens_mm}mm ${esc(s.dof)} ${esc(s.camera_move)}${s.needs_end_frame ? ' · end-frame' : ''}</div>
-        ${s.overlay_text ? `<div style="font-size:11px;color:var(--text2)"><b>On-screen:</b> ${esc(s.overlay_text)}</div>` : ''}
-        ${s.vo_text ? `<div style="font-size:11px;color:var(--text2)"><b>VO:</b> ${esc(s.vo_text)}</div>` : ''}
-        <div style="font-size:11px;color:var(--text3);margin-top:4px"><b>Still prompt →</b> ${esc(s.still_prompt_sent)}</div>
-        <div style="font-size:11px;color:var(--text3);margin-top:4px"><b>Clip prompt →</b> ${esc(s.clip_prompt_sent)}</div>
-      </div>`).join('');
-
-    switchReviewTab('cost', document.querySelector('#review-modal .atab'));
+    switchReviewTab('script', document.querySelector('#review-modal .atab'));
     document.getElementById('review-modal').classList.add('open');
   }
 
