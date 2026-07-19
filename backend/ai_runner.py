@@ -37,7 +37,7 @@ from tools.ai.veo3_client import Veo3Client, VEO3_MAX_DURATION
 from tools.ai.fal_client import FalClient
 from tools.ai.wavespeed_client import WaveSpeedClient
 from tools.ai.keyframe_generator import KeyframeGenerator
-from tools.ai.realism_prompts import ANATOMY_ARTIFACT_NEGATIVE, POSITIVE_REALISM_TAG
+from tools.ai.realism_prompts import ANATOMY_ARTIFACT_NEGATIVE, POSITIVE_REALISM_TAG, SILENT_CHARACTER_TAG
 from tools.ai.continuity_checker import ContinuityChecker
 from tools.analysis.clip_analyzer import ClipAnalyzer
 from tools.analysis.audio_prober import AudioProber
@@ -635,6 +635,15 @@ def run_ai_pipeline(job: Job, params: dict[str, Any]) -> None:
             )
             veo_model = ugc_model if reference_image_paths else standard_model
 
+            # Record the exact generation spec regardless of outcome, so a failed clip can
+            # be retried later (from the Clip Review gate) with the identical parameters
+            # that were actually used, without re-deriving them from scratch.
+            clip_gen_specs[order] = {
+                "prompt": prompt, "dest_path": dest_path, "image_path": image_path,
+                "reference_image_paths": reference_image_paths, "negative_prompt": neg_prompt,
+                "duration": duration, "veo_model": veo_model, "scene": scene["scene"],
+            }
+
             result = _generate_video_clip(
                 ai_provider, prompt=prompt, dest_path=dest_path,
                 image_path=image_path, reference_image_paths=reference_image_paths,
@@ -656,6 +665,23 @@ def run_ai_pipeline(job: Job, params: dict[str, Any]) -> None:
                 )
                 if result.success:
                     dest_path = retry_path
+
+            # ── Auto-retry once on any other (transient) failure — timeout, network,
+            # 5xx — same prompt, no rewrite needed. Veo3 has a documented per-call
+            # failure rate independent of anything the user did; a single retry clears
+            # most of these without ever reaching the user.
+            if not result.success and not _is_policy_error(result.error):
+                retry_path = str(clips_dir / f"clip_{order:03d}_retry2.mp4")
+                result = _generate_video_clip(
+                    ai_provider, prompt=prompt, dest_path=retry_path,
+                    image_path=image_path, reference_image_paths=reference_image_paths,
+                    negative_prompt=neg_prompt, duration=duration,
+                    vertex_project_id=project_id_vx, vertex_location=location,
+                    veo_model=veo_model, fal_endpoint=fal_video_endpoint, ws_model=ws_video_model,
+                )
+                if result.success:
+                    dest_path = retry_path
+
             if not result.success:
                 return order, None, f"Clip generation failed for scene {i + 1} ({ai_provider}): {result.error}"
 
@@ -718,8 +744,10 @@ def run_ai_pipeline(job: Job, params: dict[str, Any]) -> None:
         n_units = len(render_units)
 
         clip_entries_raw: dict[int, dict] = {}
+        clip_gen_specs: dict[int, dict] = {}
         gen_done = 0
         gen_errors: list[str] = []
+        gen_errors_by_order: dict[int, str] = {}
         with ThreadPoolExecutor(max_workers=4) as pool:
             futures = {pool.submit(_generate_scene_clip, u): u["order"] for u in render_units}
             for fut in as_completed(futures):
@@ -727,6 +755,7 @@ def run_ai_pipeline(job: Job, params: dict[str, Any]) -> None:
                 gen_done += 1
                 if err:
                     gen_errors.append(err)
+                    gen_errors_by_order[idx] = err
                     job.update(message=f"Clip {gen_done} failed: {err}")
                 else:
                     clip_entries_raw[idx] = entry
@@ -735,6 +764,44 @@ def run_ai_pipeline(job: Job, params: dict[str, Any]) -> None:
                         message=f"Generated {gen_done}/{n_units} AI clips"
                         + (" (VO-timed)" if multiclip_vo else ""),
                     )
+
+        # ── CLIP REVIEW GATE — only pauses when something actually failed. Lets the
+        # user retry just the failed clips (same generation params, no re-spend on the
+        # ones that already succeeded) instead of silently shipping a shorter reel.
+        if gen_errors_by_order:
+            job.clip_ctx = {
+                "ai_provider": ai_provider,
+                "vertex_project_id": project_id_vx, "vertex_location": location,
+                "fal_endpoint": fal_video_endpoint, "ws_model": ws_video_model,
+                "clips": clip_gen_specs,
+                "clip_entries_raw": clip_entries_raw,
+            }
+            scene_by_order = {u["order"]: u["scene"]["scene"] for u in render_units}
+            clip_status = [
+                {
+                    "order": o, "scene": scene_by_order.get(o),
+                    "status": "success" if o in clip_entries_raw else "failed",
+                    "clip_id": clip_entries_raw[o]["clip_id"] if o in clip_entries_raw else None,
+                    "error": gen_errors_by_order.get(o),
+                }
+                for o in sorted(scene_by_order)
+            ]
+            job.begin_stage(
+                "clip_review", "Clip Review",
+                f"{len(gen_errors_by_order)} of {n_units} clips failed — review before continuing",
+            )
+            job.request_approval({
+                "clip_review": True,
+                "reel_summary": {
+                    "mode": "ai_reels", "reel_type": reel_type,
+                    "prompt": reel_brief.get("prompt") or reel_brief.get("text_hints"),
+                },
+                "clips": clip_status,
+            })
+            approved = job.wait_for_approval(timeout=1800)
+            if not approved:
+                raise RuntimeError("Clip review timed out after 30 minutes")
+            job.end_stage("clip_review", f"{len(clip_entries_raw)}/{n_units} clips ready")
 
         clip_entries = [clip_entries_raw[i] for i in sorted(clip_entries_raw)]
 
@@ -1233,6 +1300,59 @@ def regenerate_cinematic_keyframe(job: Job, kf_id: str, image_prompt: str | None
     return {**updated, "flagged_count": data["flagged_count"]}
 
 
+def regenerate_ai_clip(job: Job, order: int, prompt_override: str | None = None) -> dict:
+    """Retry a single failed video clip during the Clip Review gate, using the exact
+    generation parameters that were actually used the first time (or an edited prompt).
+    Patches job.clip_ctx["clip_entries_raw"] in place — the SAME mutable dict object the
+    paused pipeline thread will read from once approval resumes, so a successful retry
+    here is picked up automatically without any extra plumbing."""
+    ctx = getattr(job, "clip_ctx", None)
+    if not ctx:
+        raise RuntimeError("This job has no clip context to regenerate from.")
+    spec = ctx["clips"].get(order)
+    if spec is None:
+        raise RuntimeError(f"Unknown clip order: {order}")
+
+    prompt = prompt_override or spec["prompt"]
+    result = _generate_video_clip(
+        ctx["ai_provider"], prompt=prompt, dest_path=spec["dest_path"],
+        image_path=spec.get("image_path"), reference_image_paths=spec.get("reference_image_paths"),
+        negative_prompt=spec.get("negative_prompt", ""), duration=spec.get("duration"),
+        vertex_project_id=ctx.get("vertex_project_id"), vertex_location=ctx.get("vertex_location"),
+        veo_model=spec.get("veo_model"), fal_endpoint=ctx.get("fal_endpoint"), ws_model=ctx.get("ws_model"),
+    )
+    if not result.success:
+        raise RuntimeError(f"Clip regeneration failed: {result.error}")
+
+    an = ClipAnalyzer().execute({"local_path": spec["dest_path"]})
+    if not an.success:
+        raise RuntimeError("Could not analyze regenerated clip")
+
+    # Union shape covering both consumers: standard mode reads order/sub/target_dur/pad;
+    # Cinematic's build_edit_decisions() keys clips by still_id (falling back to clip_id
+    # only when still_id is absent) — include both so a retry is transparent either way.
+    entry = {
+        "clip_id": f"clip_{order:03d}", "order": order,
+        "filename": Path(spec["dest_path"]).name, "local_path": spec["dest_path"],
+        "duration_seconds": float(an.data["duration_seconds"]),
+        "resolution": {"width": an.data["width"], "height": an.data["height"]},
+        "fps": an.data["fps"], "scene": spec.get("scene"),
+        "selection_reason": f"{ctx['ai_provider']}: retried from Clip Review gate",
+        "sub": 0, "target_dur": spec.get("duration"), "pad": 0.0, "score": None,
+        "still_id": spec.get("still_id"), "provider": ctx["ai_provider"],
+    }
+    ctx["clip_entries_raw"][order] = entry
+
+    # Patch the live approval payload so the modal reflects the retry immediately.
+    data = job.approval_data or {}
+    for c in data.get("clips", []):
+        if c.get("order") == order:
+            c.update({"status": "success", "clip_id": entry["clip_id"], "error": None})
+            break
+    job.approval_data = data
+    return {"order": order, "status": "success", "clip_id": entry["clip_id"]}
+
+
 def _keyframe_provider_ready() -> bool:
     """Whether an image provider is configured to generate standard-mode keyframes."""
     prov = (settings_manager.get("cinematic_keyframe_provider", "fal") or "fal").lower()
@@ -1364,7 +1484,8 @@ def _run_standard_keyframes(job: Job, project_dir: Path, scenes: list[dict], ree
 # silent clips. Passed as a negative prompt to keep the generated clips silent.
 _CINEMATIC_NO_SPEECH = (
     "speech, narration, voiceover, talking, dialogue, spoken words, "
-    "singing, lip movement, subtitles, captions, "
+    "singing, lip movement, mouth movement, open mouth, moving lips, talking mouth, "
+    "mid-speech expression, subtitles, captions, "
     # Style descriptors (e.g. "shot on Kodak") must affect the LOOK only — never
     # appear as literal text/letters/logos burned into the frame.
     "on-screen text, words, letters, typography, captions, watermark, logo, brand name, "
@@ -1466,7 +1587,7 @@ def _run_cinematic_clips(job: Job, params: dict, project_dir: Path, project_id: 
     def _gen(task: tuple) -> tuple:
         i, shot, still_path = task
         kf_id = shot.get("kf_id", f"KF{i + 1}")
-        video_prompt = f"{shot.get('video_prompt', '').strip()}. STYLE: {style_lock}. {POSITIVE_REALISM_TAG}".strip()
+        video_prompt = f"{shot.get('video_prompt', '').strip()}. STYLE: {style_lock}. {POSITIVE_REALISM_TAG}. {SILENT_CHARACTER_TAG}".strip()
         dest = str(clips_dir / f"clip_{i:03d}_{kf_id}.mp4")
 
         # End frame for needs_end_frame shots (first-last interpolation; fal only).
@@ -1484,6 +1605,17 @@ def _run_cinematic_clips(job: Job, params: dict, project_dir: Path, project_id: 
             vertex_project_id=vx_project, vertex_location=vx_location,
             veo_model=veo_model, fal_endpoint=fal_endpoint, ws_model=ws_model,
         )
+        # Auto-retry once on failure (timeout, network, 5xx) — Veo3 has a documented
+        # per-call failure rate; a single retry clears most of these before the user
+        # ever sees a gap.
+        if not res.success:
+            res = _generate_video_clip(
+                provider, prompt=video_prompt, dest_path=dest,
+                image_path=still_path, tail_image_path=end_still,
+                negative_prompt=_CINEMATIC_NO_SPEECH, duration=5,
+                vertex_project_id=vx_project, vertex_location=vx_location,
+                veo_model=veo_model, fal_endpoint=fal_endpoint, ws_model=ws_model,
+            )
         return i, shot, dest, res
 
     clip_entries_raw: dict[int, dict] = {}
@@ -1602,7 +1734,7 @@ def _capture_cinematic_inputs(storyboard: dict, provider: str, kf_endpoint: str,
             "image_prompt": s.get("image_prompt", ""),
             "still_prompt_sent": kg._still_prompt(s, style_lock),
             "video_prompt": s.get("video_prompt", ""),
-            "clip_prompt_sent": f"{s.get('video_prompt', '').strip()}. STYLE: {style_lock}. {POSITIVE_REALISM_TAG}".strip(),
+            "clip_prompt_sent": f"{s.get('video_prompt', '').strip()}. STYLE: {style_lock}. {POSITIVE_REALISM_TAG}. {SILENT_CHARACTER_TAG}".strip(),
             "vo_text": s.get("vo_text", ""), "overlay_text": s.get("overlay_text", ""),
         })
     return {
@@ -1992,20 +2124,39 @@ def _run_cinematic_clips_planned(job: Job, params: dict, project_dir: Path,
     def _gen(u):
         shot = shots[u["shot_index"]]
         still = str(keyframes_dir / f"{u['still_id']}.png")
-        video_prompt = f"{shot.get('video_prompt', '').strip()}. STYLE: {style_lock}. {POSITIVE_REALISM_TAG}".strip()
+        video_prompt = f"{shot.get('video_prompt', '').strip()}. STYLE: {style_lock}. {POSITIVE_REALISM_TAG}. {SILENT_CHARACTER_TAG}".strip()
         dest = str(clips_dir / f"clip_{u['order']:03d}_{u['still_id']}.mp4")
         # Smart clip length: only as long as this beat needs.
         _dur = _snap_clip_duration(provider, float(u.get("target_duration") or clip_secs))
+        # Record the exact generation spec regardless of outcome, so a failed clip can be
+        # retried later (from the Clip Review gate) with identical parameters.
+        clip_gen_specs[u["order"]] = {
+            "prompt": video_prompt, "dest_path": dest, "image_path": still,
+            "negative_prompt": _CINEMATIC_NO_SPEECH, "duration": _dur,
+            "veo_model": veo_model, "scene": u.get("scene"), "still_id": u["still_id"],
+        }
         res = _generate_video_clip(
             provider, prompt=video_prompt, dest_path=dest, image_path=still,
             negative_prompt=_CINEMATIC_NO_SPEECH, duration=_dur,
             vertex_project_id=vx_project, vertex_location=vx_location,
             veo_model=veo_model, fal_endpoint=fal_endpoint, ws_model=ws_model,
         )
+        # Auto-retry once on failure (timeout, network, 5xx) — Veo3 has a documented
+        # per-call failure rate; a single retry clears most of these before the user
+        # ever sees a gap.
+        if not res.success:
+            res = _generate_video_clip(
+                provider, prompt=video_prompt, dest_path=dest, image_path=still,
+                negative_prompt=_CINEMATIC_NO_SPEECH, duration=_dur,
+                vertex_project_id=vx_project, vertex_location=vx_location,
+                veo_model=veo_model, fal_endpoint=fal_endpoint, ws_model=ws_model,
+            )
         return u, dest, res
 
     entries_raw: dict[int, dict] = {}
+    clip_gen_specs: dict[int, dict] = {}
     errors: list[str] = []
+    errors_by_order: dict[int, str] = {}
     done = 0
     with ThreadPoolExecutor(max_workers=4) as pool:
         futures = [pool.submit(_gen, u) for u in units]
@@ -2014,11 +2165,13 @@ def _run_cinematic_clips_planned(job: Job, params: dict, project_dir: Path,
             done += 1
             if not res.success:
                 errors.append(f"beat {u['order']}: {res.error}")
+                errors_by_order[u["order"]] = res.error
                 job.update(message=f"Clip {done}/{n} failed: {res.error}")
                 continue
             an = ClipAnalyzer().execute({"local_path": dest})
             if not an.success:
                 errors.append(f"beat {u['order']}: analyze failed")
+                errors_by_order[u["order"]] = "Could not analyze generated clip"
                 continue
             entries_raw[u["order"]] = {
                 "clip_id": f"clip_{u['order']:03d}",
@@ -2033,10 +2186,46 @@ def _run_cinematic_clips_planned(job: Job, params: dict, project_dir: Path,
             }
             job.update(progress_pct=34 + int((done / n) * 38), message=f"Generated {done}/{n} clips")
 
-    clip_entries = [entries_raw[o] for o in sorted(entries_raw)]
     balance_err = next((e for e in errors if any(w in e.lower() for w in ("balance", "locked", "exhaust"))), None)
     if balance_err:
         job.update(message="⚠ fal balance exhausted — top up at fal.ai/dashboard/billing.")
+
+    # ── CLIP REVIEW GATE — only pauses when something actually failed. Lets the user
+    # retry just the failed clips (same generation params, no re-spend on the ones that
+    # already succeeded) instead of silently shipping a shorter reel.
+    if errors_by_order:
+        job.clip_ctx = {
+            "ai_provider": provider,
+            "vertex_project_id": vx_project, "vertex_location": vx_location,
+            "fal_endpoint": fal_endpoint, "ws_model": ws_model,
+            "clips": clip_gen_specs,
+            "clip_entries_raw": entries_raw,
+        }
+        scene_by_order = {u["order"]: u.get("scene") for u in units}
+        clip_status = [
+            {
+                "order": o, "scene": scene_by_order.get(o),
+                "status": "success" if o in entries_raw else "failed",
+                "clip_id": entries_raw[o]["clip_id"] if o in entries_raw else None,
+                "error": errors_by_order.get(o),
+            }
+            for o in sorted(scene_by_order)
+        ]
+        job.begin_stage(
+            "clip_review", "Clip Review",
+            f"{len(errors_by_order)} of {n} clips failed — review before continuing",
+        )
+        job.request_approval({
+            "clip_review": True,
+            "reel_summary": {"mode": "ai_reels", "reel_type": "cinematic", "prompt": params.get("prompt")},
+            "clips": clip_status,
+        })
+        approved = job.wait_for_approval(timeout=1800)
+        if not approved:
+            raise RuntimeError("Clip review timed out after 30 minutes")
+        job.end_stage("clip_review", f"{len(entries_raw)}/{n} clips ready")
+
+    clip_entries = [entries_raw[o] for o in sorted(entries_raw)]
     if len(clip_entries) < 2:
         first = balance_err or (errors[0] if errors else "unknown error")
         raise RuntimeError(f"Only {len(clip_entries)}/{n} clips generated — need at least 2. {first}")

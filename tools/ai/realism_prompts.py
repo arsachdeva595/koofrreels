@@ -30,3 +30,13 @@ POSITIVE_REALISM_TAG = (
     "anatomically correct, natural human proportions, exactly two arms and two hands with five "
     "fingers each, hands anchored to a single object or surface, one steady deliberate motion"
 )
+
+# Cinematic-only. The app lays a separately-generated ElevenLabs voiceover over these clips —
+# any dialogue/mouth movement Veo invents on its own reads as broken lip-sync since it can never
+# match. Cinematic mode is documentary/narration style: characters act, move, and react, but
+# never appear to speak. Applied unconditionally to every Cinematic shot (not gated on
+# speaking_on_camera — that field has no real lip-sync backing it, so there's no safe "true" case).
+SILENT_CHARACTER_TAG = (
+    "mouth closed, lips gently together, completely silent, not speaking or mouthing any words, "
+    "expression conveyed through eyes, posture and body language only"
+)

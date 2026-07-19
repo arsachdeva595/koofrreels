@@ -30,7 +30,7 @@ from backend.meme_runner import run_meme_pipeline
 from backend.audio_runner import run_audio_pipeline
 from backend.stock_runner import run_stock_pipeline
 from backend.studio_runner import run_studio_pipeline
-from backend.ai_runner import run_ai_pipeline, regenerate_cinematic_keyframe
+from backend.ai_runner import run_ai_pipeline, regenerate_cinematic_keyframe, regenerate_ai_clip
 from starlette.concurrency import run_in_threadpool
 from backend.studio_constants import MODEL_LIBRARY
 from backend.model_presets import MODEL_PRESETS
@@ -652,6 +652,26 @@ async def regenerate_ai_keyframe(job_id: str, body: RegenerateKeyframeRequest):
     except Exception as exc:
         raise HTTPException(status_code=500, detail=str(exc))
     return {"ok": True, "keyframe": updated}
+
+
+class RegenerateClipRequest(BaseModel):
+    order: int
+    prompt: str | None = None
+
+
+@app.post("/ai/{job_id}/regenerate-clip")
+async def regenerate_ai_video_clip(job_id: str, body: RegenerateClipRequest):
+    """Retry a single failed video clip during the Clip Review gate."""
+    job = job_manager.get(job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+    if job.status != JobStatus.AWAITING_APPROVAL:
+        raise HTTPException(status_code=400, detail="Job is not at the clip review gate")
+    try:
+        updated = await run_in_threadpool(regenerate_ai_clip, job, body.order, body.prompt)
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
+    return {"ok": True, "clip": updated}
 
 
 @app.post("/api/ai/upload-image")

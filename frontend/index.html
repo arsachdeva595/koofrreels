@@ -2097,6 +2097,7 @@
         <button class="atab" onclick="switchApprovalTab('summary', this)">Summary</button>
         <button class="atab" id="atab-policy-btn" onclick="switchApprovalTab('policy', this)" style="display:none">⚠ Policy Review</button>
         <button class="atab" id="atab-continuity-btn" onclick="switchApprovalTab('continuity', this)" style="display:none">🎞 Continuity Review</button>
+        <button class="atab" id="atab-clipreview-btn" onclick="switchApprovalTab('clipreview', this)" style="display:none">🎬 Clip Review</button>
       </div>
     </div>
 
@@ -2119,6 +2120,11 @@
       <!-- Tab: Continuity Review (Cinematic keyframe stills) -->
       <div class="atab-panel" id="atab-continuity">
         <div id="approval-continuity-list"></div>
+      </div>
+
+      <!-- Tab: Clip Review (only shown when a video clip failed to generate) -->
+      <div class="atab-panel" id="atab-clipreview">
+        <div id="approval-clipreview-list"></div>
       </div>
     </div>
 
@@ -2715,6 +2721,20 @@
       if (approveBtn) approveBtn.textContent = 'Approve & Render ▶';
     }
 
+    // Clip Review tab — only appears when a video clip failed to generate. Lets you
+    // retry just the failed ones (same params) before the reel gets assembled.
+    const clipBtn = document.getElementById('atab-clipreview-btn');
+    if (data.clip_review) {
+      const failedCount = (data.clips || []).filter(c => c.status === 'failed').length;
+      clipBtn.style.display = '';
+      clipBtn.textContent = failedCount ? `🎬 Clip Review (${failedCount})` : '🎬 Clip Review';
+      renderClipReview(data);
+      if (approveBtn) approveBtn.textContent = 'Continue ▶';
+    } else {
+      clipBtn.style.display = 'none';
+      document.getElementById('approval-clipreview-list').innerHTML = '';
+    }
+
     // Cost estimate — you approve the spend before anything is generated.
     const costBanner = document.getElementById('approval-cost-banner');
     const ce = data.cost_estimate;
@@ -2734,8 +2754,10 @@
       costBanner.style.display = 'none';
     }
 
-    // Open straight to the continuity tab when there are stills to review.
-    if (data.continuity) {
+    // Open straight to the clip/continuity tab when that's the active gate.
+    if (data.clip_review) {
+      switchApprovalTab('clipreview', document.getElementById('atab-clipreview-btn'));
+    } else if (data.continuity) {
       switchApprovalTab('continuity', document.getElementById('atab-continuity-btn'));
     } else {
       switchApprovalTab('script', document.querySelector('.atab'));
@@ -2801,6 +2823,58 @@
     } catch (e) {
       showModuleError('ai', e.message);
     } finally {
+      btn.disabled = false; btn.textContent = orig;
+    }
+  }
+
+  const _CLIP_STATUS_COLOR = { success: '#1c7a3e', failed: '#b3261e' };
+  const _CLIP_STATUS_LABEL = { success: '✓ generated', failed: '✕ failed' };
+
+  function renderClipReview(data) {
+    const list = document.getElementById('approval-clipreview-list');
+    const clips = data.clips || [];
+    const failedCount = clips.filter(c => c.status === 'failed').length;
+    const intro = `<div style="padding:10px 0 8px;font-size:12px;color:var(--text3);line-height:1.6">
+      ${failedCount} of ${clips.length} clips didn't generate (Veo has a documented per-call failure rate — this
+      isn't caused by how long you took to review). Retry a failed clip below, or continue without it — clips that
+      already succeeded are untouched either way, nothing gets re-spent.</div>`;
+    list.innerHTML = intro + clips.map(c => {
+      const statusColor = _CLIP_STATUS_COLOR[c.status] || '#666';
+      const statusLabel = _CLIP_STATUS_LABEL[c.status] || esc(c.status);
+      return `<div class="cont-item" data-clip-order="${c.order}" style="display:flex;gap:12px;border:1px solid #2a2a32;border-radius:8px;padding:10px;margin-bottom:10px">
+        <div style="flex:1;display:flex;flex-direction:column;gap:6px">
+          <div style="display:flex;align-items:center;gap:8px">
+            <span style="font-weight:700;font-size:12px">Scene ${c.scene != null ? c.scene : c.order}</span>
+            <span id="clip-status-${c.order}" style="background:${statusColor};color:#fff;border-radius:4px;padding:2px 7px;font-size:10px;font-weight:700">${statusLabel}</span>
+          </div>
+          ${c.status === 'failed' ? `<div id="clip-error-${c.order}" style="font-size:11px;color:var(--text3);line-height:1.5">${esc(c.error || 'Unknown error')}</div>
+          <button onclick="retryClip(${c.order}, this)" style="align-self:flex-start;font-size:11px;padding:5px 12px;border-radius:6px;cursor:pointer;background:#6d4aff;color:#fff;border:none">↻ Retry this clip</button>` : ''}
+        </div>
+      </div>`;
+    }).join('');
+  }
+
+  async function retryClip(order, btn) {
+    const orig = btn.textContent;
+    btn.disabled = true; btn.textContent = '↻ Retrying…';
+    try {
+      const r = await fetch(`${API}/ai/${currentJobId}/regenerate-clip`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ order }),
+      });
+      if (!r.ok) throw new Error((await r.json()).detail || 'Retry failed');
+      const statusEl = document.getElementById(`clip-status-${order}`);
+      if (statusEl) { statusEl.style.background = _CLIP_STATUS_COLOR.success; statusEl.textContent = _CLIP_STATUS_LABEL.success; }
+      const errorEl = document.getElementById(`clip-error-${order}`);
+      if (errorEl) errorEl.remove();
+      btn.remove();
+      const remaining = document.querySelectorAll('#approval-clipreview-list [id^="clip-status-"]');
+      const stillFailed = Array.from(remaining).filter(el => el.textContent.includes('failed')).length;
+      const clipBtn = document.getElementById('atab-clipreview-btn');
+      if (clipBtn) clipBtn.textContent = stillFailed ? `🎬 Clip Review (${stillFailed})` : '🎬 Clip Review';
+    } catch (e) {
+      showModuleError('ai', e.message);
       btn.disabled = false; btn.textContent = orig;
     }
   }
