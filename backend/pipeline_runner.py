@@ -943,6 +943,21 @@ def _generate_cinematic_storyboard(reel_brief: dict) -> dict:
         "  shot's image_prompt/video_prompt. For all other shots set \"feature_product\": false.\n"
     ) if _product_desc else ""
 
+    # Lock every shot's image_prompt/video_prompt to the ACTUAL uploaded/preset reference so
+    # the director never invents a gender/age/look that contradicts the real photo (e.g. a
+    # male reference must never become "a woman" in image_prompt) — same fix as the standard
+    # AI-reels storyboard's ON-CAMERA PERSON section.
+    _char_desc = reel_brief.get("character_description", "")
+    character_rule = (
+        f"\nON-CAMERA CHARACTER — MATCH THE REFERENCE IMAGE EXACTLY:\n"
+        f"The character is a specific real individual from the reference image:\n"
+        f"  {_char_desc}\n"
+        "- EVERY image_prompt/video_prompt featuring the character MUST depict THIS person — match\n"
+        "  their gender, age range and look. Refer to them consistently (e.g. \"the man\", \"he\").\n"
+        "- Never describe a different gender, age, or appearance than the reference. When unsure, say\n"
+        "  \"the character\" / \"the person\" rather than inventing details.\n"
+    ) if _char_desc else ""
+
     # Same Veo3/Nano content policy that governs the AI-Reels storyboard: English-only
     # visual prompts, never minor/age terms, avoid violence/self-harm/sexual triggers.
     policy = """
@@ -983,6 +998,7 @@ TTS PRONUNCIATION (vo_text only — it is read aloud by ElevenLabs):
         "- overlay_text: short punchy ON-SCREEN caption for this beat (≤6 words, front-load tension).\n"
         "  Carry the narrative like a captioned reel. Use \"\" for pure-visual beats — NOT every shot\n"
         "  needs text (aim for ~half). overlay_text may be Hinglish (brand voice); keep it tight.\n"
+        + character_rule
         + product_rule
         + policy +
         "\nRespond ONLY with valid JSON — no markdown fences.\n"

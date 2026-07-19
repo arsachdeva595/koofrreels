@@ -227,15 +227,18 @@ def run_ai_pipeline(job: Job, params: dict[str, Any]) -> None:
         # Preset model (library_model_id) resolves to a real reference photo BEFORE any
         # validation below checks character_image_path, so picking a preset satisfies the
         # "needs a reference image" requirement exactly like an upload would. It also
-        # decides the auto-paired ElevenLabs voice (gender-mapped), unless the user has a
-        # manual voice_id set in Settings, which always wins.
+        # decides the auto-paired ElevenLabs voice (gender-mapped). A selected preset's
+        # voice wins over the global Settings voice — that global field predates presets
+        # and is very likely already set for most users, so if it always won, picking a
+        # preset would never actually change the voice. Settings still applies as the
+        # fallback when no preset is selected (manual upload / no library_model_id).
         preset = get_preset(params.get("library_model_id") or "")
         if preset:
             params["character_image_path"] = preset["photo"]
         resolved_voice_id = (
-            settings_manager.get("elevenlabs_voice_id", "")
+            (voice_for_preset(preset) if preset else None)
             or params.get("voice_id")
-            or (voice_for_preset(preset) if preset else None)
+            or settings_manager.get("elevenlabs_voice_id", "")
         )
         # Stashed on the (mutable, shared-by-reference) params dict so every downstream
         # function that already receives `params` can read it without a new parameter.
@@ -301,11 +304,11 @@ def run_ai_pipeline(job: Job, params: dict[str, Any]) -> None:
             except Exception as _exc:
                 job.update(message=f"Product image analysis skipped ({_exc})")
 
-        # ── Character / UGC mode: read the CREATOR from their image (vision) ────
+        # ── Character / UGC / Cinematic mode: read the CREATOR from their image (vision) ──
         # so the script depicts the real person (gender/age/look) instead of Claude
         # inventing one that contradicts the reference (e.g. a man ref → "woman" script).
         _char_img = params.get("character_image_path")
-        if params.get("reel_type") in ("character", "ugc") and _char_img and Path(_char_img).exists():
+        if params.get("reel_type") in ("character", "ugc", "cinematic") and _char_img and Path(_char_img).exists():
             try:
                 reel_brief["character_description"] = _describe_person(_char_img)
                 job.update(message="Creator analyzed from image")
