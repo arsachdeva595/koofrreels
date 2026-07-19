@@ -810,8 +810,13 @@ def run_ai_pipeline(job: Job, params: dict[str, Any]) -> None:
                 base = target if target is not None else clip_len
                 trim_in = pad if pad < clip_len - 0.3 else 0.0
                 is_last = idx == len(ordered) - 1
-                extra = 0.0 if is_last else _DISSOLVE
-                trim_out = round(min(trim_in + base + extra, clip_len), 3)
+                # Every clip gets the same margin in trim_out, last one included — for
+                # non-last clips the crossfade into the next clip eats it, but for the
+                # last clip this margin is its ONLY protection against the VO atrim
+                # window (build_positioned_voiceover) clipping the narration's tail on
+                # any small timing/rounding mismatch. It doesn't need to dissolve into
+                # anything to still need the safety margin.
+                trim_out = round(min(trim_in + base + _DISSOLVE, clip_len), 3)
                 if trim_out <= trim_in:
                     trim_out = round(min(trim_in + 2.0, clip_len), 3)
                 cuts.append({

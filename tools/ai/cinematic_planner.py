@@ -70,11 +70,13 @@ def build_render_plan(
 def build_edit_decisions(render_plan: list[dict], clip_manifest: dict, dissolve: float = 0.3) -> dict:
     """Turn the render plan + generated clips into edit_decisions the composer uses.
 
-    One cut per render unit, in order, with a soft DISSOLVE between shots. Each non-last
-    clip is extended by `dissolve` seconds into its spare footage (clips are generated a
-    touch longer than needed), so the crossfade overlaps that extra — not the voiceover.
-    The net visible length per shot stays == its target, so the full narration lays over
-    the timeline in sync.
+    One cut per render unit, in order, with a soft DISSOLVE between shots. Every clip is
+    extended by `dissolve` seconds into its spare footage (clips are generated a touch
+    longer than needed) — for non-last clips the crossfade overlaps that extra, not the
+    voiceover; the last clip has no crossfade to consume it, but still needs the same
+    margin as protection against the VO atrim window (build_positioned_voiceover) clipping
+    the narration's tail on any small timing/rounding mismatch. The net visible length per
+    non-last shot stays == its target, so the full narration lays over the timeline in sync.
     """
     by_still = {c.get("still_id") or c.get("clip_id"): c for c in clip_manifest.get("clips", [])}
     usable = [u for u in render_plan if by_still.get(u["still_id"])]
@@ -84,8 +86,7 @@ def build_edit_decisions(render_plan: list[dict], clip_manifest: dict, dissolve:
         clip = by_still[unit["still_id"]]
         clip_len = float(clip.get("duration_seconds", unit["target_duration"]))
         is_last = idx == len(usable) - 1
-        extra = 0.0 if is_last else dissolve
-        trim_out = round(min(float(unit["target_duration"]) + extra, clip_len), 3)
+        trim_out = round(min(float(unit["target_duration"]) + dissolve, clip_len), 3)
         if trim_out <= 0:
             continue
         cuts.append({
