@@ -541,6 +541,31 @@
         <div class="note">ℹ️ fal &amp; WaveSpeed are <strong>image-to-video</strong>: they need a first-frame image. For text-only scenes the app automatically falls back to Google Veo if your Vertex project is configured; otherwise it tells you to switch to Veo.</div>
         <div class="note">ℹ️ All three providers now render natively in <strong>9:16 vertical</strong> — Google Veo used to default to landscape (fixed by explicitly requesting 9:16); fal/WaveSpeed always matched the input keyframe image.</div>
 
+        <h3>🆕 Changing your Google Cloud Project ID</h3>
+        <p>Everything Google-side (Veo video + Vertex/Gemini keyframe stills) reads a single setting: <strong>Google Cloud Project ID</strong>, in <code>Settings → API Keys → Google Cloud</code>. Switching to a different GCP project touches both Google Cloud itself and this app's settings.</p>
+
+        <div class="prereq">
+          <span class="lbl">Do this once per environment:</span> the setting lives in a separate <code>settings.json</code> on your <strong>local machine</strong> and on the <strong>Contabo server</strong> — updating it locally does not update the server, and vice versa.
+        </div>
+
+        <div class="steps">
+          <ol>
+            <li><strong>In Google Cloud Console (new/target project):</strong> enable billing, then enable the <strong>Vertex AI API</strong> (<code>aiplatform.googleapis.com</code>).</li>
+            <li><strong>Model Garden:</strong> open the <strong>Veo</strong> model card (and the Gemini image model if you use Google for keyframes) and confirm access shows enabled — a brand-new project sometimes needs this granted separately from the API itself.</li>
+            <li><strong>Service account:</strong> create one (or reuse), then grant it a role that includes <code>aiplatform.endpoints.predict</code> — <strong>Vertex AI User</strong> is the standard one; if that role isn't offered, <strong>Vertex AI Service Agent</strong> + <strong>AI Platform Admin</strong> together also work. Generate a JSON key for it.</li>
+            <li><strong>In Settings → API Keys → Google Cloud</strong>, update three fields: <strong>Google Cloud Project ID</strong> (the bare ID, e.g. <code>project-xxxxxxxx-xxxx-xxxx-xxxx</code> — not a URL or a longer string with anything appended), <strong>Vertex AI Location</strong>, and <strong>Google Credentials Path</strong> pointing at the new key file.</li>
+            <li>No restart needed — settings are read fresh on every generation. Run a small test generation to confirm.</li>
+            <li><strong>Repeat on the server</strong> if you also generate from the hosted app: upload the new key file to the server, then update the same three fields at <code>http://13.140.170.214/settings</code>.</li>
+          </ol>
+        </div>
+
+        <table>
+          <tr><th>Error you see</th><th>What it means</th></tr>
+          <tr><td><code>PERMISSION_DENIED</code> / <code>CONSUMER_INVALID</code> on a project string</td><td>The <strong>Project ID</strong> field doesn't match a real project — usually a typo, or extra characters pasted in from a URL/resource path. It must exactly match the <code>project_id</code> field inside your service-account JSON key.</td></tr>
+          <tr><td><code>Permission 'aiplatform.endpoints.predict' denied</code> on a Veo model path</td><td>Project ID is correct, but the service account lacks IAM access, or Veo isn't enabled for this project in Model Garden. Check both (steps 2–3 above).</td></tr>
+        </table>
+        <div class="tip">💡 The quickest sanity check when something's wrong: open the key file and confirm its <code>project_id</code> matches <strong>exactly</strong> what's typed into the Project ID setting — a mismatch there is the most common cause of a "project not found" style error.</div>
+
         <h3>fal video models &amp; rough cost</h3>
         <p>When the provider is fal, pick from the dropdown — labels show an <strong>approximate per-second rate</strong> (verify exact pricing on the model's fal page). Video bills <strong>per second</strong>.</p>
         <table>
